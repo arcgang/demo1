@@ -5,6 +5,7 @@ const { DatabaseSync } = require('node:sqlite');
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
+const { recommend } = require('./recommend.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -200,5 +201,6 @@ module.exports = {
   attach,
   getAttachmentsForDevice,
   getAttachmentsForDevicePlan,
+  recommend,
   seed,
 };
