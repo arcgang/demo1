@@ -41,11 +41,12 @@ const model = require('./index.js');
 // Match `/devices/{id}/recommendations`, capturing the raw device id segment.
 const ROUTE = /^\/devices\/([^/]+)\/recommendations\/?$/;
 
-function sendJson(res, status, payload) {
+function sendJson(res, status, payload, extraHeaders) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
     'content-type': 'application/json; charset=utf-8',
     'content-length': Buffer.byteLength(body),
+    ...extraHeaders,
   });
   res.end(body);
 }
@@ -106,7 +107,8 @@ function createServer(db) {
     }
 
     if (req.method !== 'GET') {
-      sendJson(res, 405, { error: 'method not allowed' });
+      // RFC 7231 §6.5.5: a 405 response MUST advertise the supported methods.
+      sendJson(res, 405, { error: 'method not allowed' }, { allow: 'GET' });
       return;
     }
 
