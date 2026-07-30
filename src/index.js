@@ -6,6 +6,7 @@ const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requi
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
+const { recalculateCart } = require('./cart.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -202,5 +203,6 @@ module.exports = {
   getAttachmentsForDevice,
   getAttachmentsForDevicePlan,
   recommend,
+  recalculateCart,
   seed,
 };
