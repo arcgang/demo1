@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/GoogleChrome/lighthouse/main/types/lhr/budget.d.ts",
+  "description": "Low-bandwidth performance budgets and constrained network/CPU profile. Single source of truth shared by measurement tooling and reviewers. Grounded in HLD section 11.5.",
+  "version": 1,
+  "budgets": [
+    {
+      "metric": "LCP",
+      "pages": ["landing", "category"],
+      "threshold": 2.5,
+      "unit": "s",
+      "percentile": "p75",
+      "note": "Largest Contentful Paint for content-first pages (landing + category), measured at the 75th percentile of real-user / lab runs on the constrained profile."
+    },
+    {
+      "metric": "TTI",
+      "pages": ["product", "cart", "checkout"],
+      "threshold": 3.0,
+      "unit": "s",
+      "percentile": "p75",
+      "note": "Time To Interactive for interaction-heavy funnel pages (product, cart, checkout), measured at the 75th percentile."
+    }
+  ],
+  "api": {
+    "percentile": "p95",
+    "respondWithin": 2,
+    "completeWithin": 5,
+    "unit": "s",
+    "note": "For 95% of API interactions a first response must be shown within 2s and the interaction must fully complete within 5s."
+  },
+  "profile": {
+    "name": "constrained-low-bandwidth",
+    "description": "Reusable throttling profile approximating a low-end mobile device on a regular-3G-class link. Apply directly in Lighthouse / WebPageTest / Playwright CDP throttling so lab measurements share one definition.",
+    "deviceClass": "low-end-mobile",
+    "network": {
+      "profileName": "Regular 3G (constrained)",
+      "downloadThroughputKbps": 1600,
+      "uploadThroughputKbps": 768,
+      "latencyMs": 150
+    },
+    "cpu": {
+      "slowdownMultiplier": 4,
+      "note": "4x slowdown relative to a reference desktop CPU, representative of a low-end mobile SoC."
+    }
+  }
+}
