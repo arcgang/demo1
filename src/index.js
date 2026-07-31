@@ -43,6 +43,18 @@ const {
   JOURNEY_VALUES,
   isValidJourney,
 } = require('./audit.js');
+const {
+  REASON_CODE,
+  REASON_CODE_VALUES,
+  CATEGORY,
+  CATEGORY_VALUES,
+  STATE_PRESERVATION,
+  STATE_PRESERVATION_VALUES,
+  getReasonMeta,
+  isValidReasonCode,
+} = require('./reason-codes.js');
+const { AppError, fromReasonCode } = require('./app-error.js');
+const { toUserFacingError } = require('./user-facing-error.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -266,6 +278,17 @@ module.exports = {
   JOURNEY,
   JOURNEY_VALUES,
   isValidJourney,
+  REASON_CODE,
+  REASON_CODE_VALUES,
+  CATEGORY,
+  CATEGORY_VALUES,
+  STATE_PRESERVATION,
+  STATE_PRESERVATION_VALUES,
+  getReasonMeta,
+  isValidReasonCode,
+  AppError,
+  fromReasonCode,
+  toUserFacingError,
   createDatabase,
   createDevice,
   createPlan,
