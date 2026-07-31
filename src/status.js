@@ -1,99 +1,53 @@
 'use strict';
 
 // The order/activation status vocabulary shared by the schema (CHECK
-// constraints) and the application layer. This is the single source of truth
-// for these status strings.
+// constraints) and the application/service layer. This is the single source of
+// truth for these status strings and mirrors the pattern of `requirement.js`.
 //
-// A customer's journey moves through four PHASES, each of which carries its
-// own set of meaningful states — this is deliberately NOT a generic
-// "pending only" vocabulary. PENDING is the only value common to every phase;
-// every phase adds its own distinct, meaningful states.
+// Two distinct vocabularies are exposed:
+//
+//   MILESTONE      the journey domains the status timeline aggregates —
+//                  PAYMENT, VERIFICATION, FULFILMENT, ACTIVATION.
+//   STATUS_STATE   the meaningful states a milestone can be in. Deliberately
+//                  richer than a generic "pending": every non-terminal state is
+//                  distinct so the timeline can express real progress.
 
-// The four phases of the order/activation journey.
-const STATUS_PHASES = Object.freeze({
+// The four milestone domains aggregated by the status timeline.
+const MILESTONE = Object.freeze({
   PAYMENT: 'PAYMENT',
   VERIFICATION: 'VERIFICATION',
   FULFILMENT: 'FULFILMENT',
   ACTIVATION: 'ACTIVATION',
 });
 
-const STATUS_PHASES_VALUES = Object.freeze(Object.values(STATUS_PHASES));
+const MILESTONE_VALUES = Object.freeze(Object.values(MILESTONE));
 
-function isValidStatusPhase(value) {
-  return STATUS_PHASES_VALUES.includes(value);
+function isValidMilestone(value) {
+  return MILESTONE_VALUES.includes(value);
 }
 
-// PAYMENT: a payment attempt is PENDING (awaiting provider confirmation),
-// AUTHORIZED (funds confirmed), or FAILED.
-const PAYMENT_STATUS = Object.freeze({
-  PENDING: 'PENDING',
-  AUTHORIZED: 'AUTHORIZED',
-  FAILED: 'FAILED',
-});
-
-const PAYMENT_STATUS_VALUES = Object.freeze(Object.values(PAYMENT_STATUS));
-
-function isValidPaymentStatus(value) {
-  return PAYMENT_STATUS_VALUES.includes(value);
-}
-
-// VERIFICATION: KYC/RICA verification is NOT_REQUIRED for unregulated
-// products, otherwise PENDING until it has PASSED or FAILED.
-const VERIFICATION_STATUS = Object.freeze({
-  NOT_REQUIRED: 'NOT_REQUIRED',
-  PENDING: 'PENDING',
-  PASSED: 'PASSED',
-  FAILED: 'FAILED',
-});
-
-const VERIFICATION_STATUS_VALUES = Object.freeze(Object.values(VERIFICATION_STATUS));
-
-function isValidVerificationStatus(value) {
-  return VERIFICATION_STATUS_VALUES.includes(value);
-}
-
-// FULFILMENT: order fulfilment is PENDING, then IN_PROGRESS, then COMPLETED.
-const FULFILMENT_STATUS = Object.freeze({
+// The meaningful states a milestone can carry. PENDING is the neutral starting
+// state; IN_PROGRESS, COMPLETE, BLOCKED, and FAILED each carry real meaning
+// beyond a generic pending.
+const STATUS_STATE = Object.freeze({
   PENDING: 'PENDING',
   IN_PROGRESS: 'IN_PROGRESS',
-  COMPLETED: 'COMPLETED',
-});
-
-const FULFILMENT_STATUS_VALUES = Object.freeze(Object.values(FULFILMENT_STATUS));
-
-function isValidFulfilmentStatus(value) {
-  return FULFILMENT_STATUS_VALUES.includes(value);
-}
-
-// ACTIVATION: activation is PENDING, BLOCKED (waiting on payment/verification
-// prerequisites), ACTIVE once complete, or FAILED.
-const ACTIVATION_STATUS = Object.freeze({
-  PENDING: 'PENDING',
+  COMPLETE: 'COMPLETE',
   BLOCKED: 'BLOCKED',
-  ACTIVE: 'ACTIVE',
   FAILED: 'FAILED',
 });
 
-const ACTIVATION_STATUS_VALUES = Object.freeze(Object.values(ACTIVATION_STATUS));
+const STATUS_STATE_VALUES = Object.freeze(Object.values(STATUS_STATE));
 
-function isValidActivationStatus(value) {
-  return ACTIVATION_STATUS_VALUES.includes(value);
+function isValidStatusState(value) {
+  return STATUS_STATE_VALUES.includes(value);
 }
 
 module.exports = {
-  STATUS_PHASES,
-  STATUS_PHASES_VALUES,
-  isValidStatusPhase,
-  PAYMENT_STATUS,
-  PAYMENT_STATUS_VALUES,
-  isValidPaymentStatus,
-  VERIFICATION_STATUS,
-  VERIFICATION_STATUS_VALUES,
-  isValidVerificationStatus,
-  FULFILMENT_STATUS,
-  FULFILMENT_STATUS_VALUES,
-  isValidFulfilmentStatus,
-  ACTIVATION_STATUS,
-  ACTIVATION_STATUS_VALUES,
-  isValidActivationStatus,
+  MILESTONE,
+  MILESTONE_VALUES,
+  isValidMilestone,
+  STATUS_STATE,
+  STATUS_STATE_VALUES,
+  isValidStatusState,
 };
