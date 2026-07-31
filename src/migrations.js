@@ -103,6 +103,48 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'create_consent_and_audit',
+    up(db) {
+      // Consent records: purpose-specific POPIA consent capture. Each row records
+      // whether a subject granted a given purpose (e.g. MARKETING, PERSONALIZATION)
+      // within a particular journey (CHECKOUT or ONBOARDING).
+      //
+      // Constraints encoded in the schema:
+      //  - subject_ref/purpose/journey are required (a consent is always for
+      //    someone, for a purpose, within a journey).
+      //  - granted is a 0/1 flag.
+      //  - recorded_at defaults to the capture time.
+      db.exec(`
+        CREATE TABLE consent_records (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          subject_ref TEXT    NOT NULL,
+          purpose     TEXT    NOT NULL,
+          granted     INTEGER NOT NULL CHECK (granted IN (0, 1)),
+          journey     TEXT    NOT NULL,
+          recorded_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Audit events: sensitive and business-critical event log (e.g.
+      // SENSITIVE_DATA_ACCESS, CONSENT_CAPTURE). subject_ref is optional because
+      // not every audited event is tied to a specific subject.
+      db.exec(`
+        CREATE TABLE audit_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type  TEXT    NOT NULL,
+          subject_ref TEXT,
+          journey     TEXT    NOT NULL,
+          detail      TEXT,
+          recorded_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      db.exec(`CREATE INDEX idx_audit_events_event_type ON audit_events(event_type);`);
+      db.exec(`CREATE INDEX idx_consent_records_subject_ref ON consent_records(subject_ref);`);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
