@@ -17,6 +17,21 @@ const {
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
 } = require('./order-status.js');
+const {
+  DONOR_NETWORK,
+  DONOR_NETWORK_VALUES,
+  isValidDonorNetwork,
+  isValidDonorOperator,
+  OWNERSHIP_TYPE,
+  OWNERSHIP_TYPE_VALUES,
+  isValidOwnershipType,
+  VERIFICATION_STATUS,
+  VERIFICATION_STATUS_VALUES,
+  isValidVerificationStatus,
+  PORTING_OUTCOME,
+  PORTING_OUTCOME_VALUES,
+  isValidPortingOutcome,
+} = require('./porting.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -217,6 +232,19 @@ module.exports = {
   ORDER_STATUS_VALUES,
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
+  DONOR_NETWORK,
+  DONOR_NETWORK_VALUES,
+  isValidDonorNetwork,
+  isValidDonorOperator,
+  OWNERSHIP_TYPE,
+  OWNERSHIP_TYPE_VALUES,
+  isValidOwnershipType,
+  VERIFICATION_STATUS,
+  VERIFICATION_STATUS_VALUES,
+  isValidVerificationStatus,
+  PORTING_OUTCOME,
+  PORTING_OUTCOME_VALUES,
+  isValidPortingOutcome,
   createDatabase,
   createDevice,
   createPlan,
