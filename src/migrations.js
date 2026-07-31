@@ -103,6 +103,39 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 5,
+    name: 'create_audit_events',
+    up(db) {
+      // Audit events: the AuditEvent data object from the HLD, recording
+      // sensitive-data access and critical consent/verification/payment actions
+      // for POPIA/PCI-DSS auditability. Only non-sensitive metadata is stored;
+      // raw PII/PAN never lands here.
+      //
+      // Constraints encoded in the schema:
+      //  - event_type is a required label (e.g. SENSITIVE_DATA_ACCESS,
+      //    CONSENT_CAPTURED) describing what happened.
+      //  - journey is constrained to the known customer journeys.
+      //  - subject_ref points at the entity the event concerns (e.g. a
+      //    verification case, customer, or order reference).
+      //  - actor and detail are optional metadata; detail holds a JSON string
+      //    of non-sensitive context.
+      //  - occurred_at defaults to the current timestamp.
+      db.exec(`
+        CREATE TABLE audit_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          event_type  TEXT    NOT NULL,
+          journey     TEXT    NOT NULL CHECK (journey IN ('CHECKOUT', 'ONBOARDING')),
+          subject_ref TEXT    NOT NULL,
+          actor       TEXT,
+          detail      TEXT,
+          occurred_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      db.exec(`CREATE INDEX idx_audit_events_journey_occurred ON audit_events(journey, occurred_at);`);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
