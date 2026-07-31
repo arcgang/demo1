@@ -17,6 +17,11 @@ const {
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
 } = require('./order-status.js');
+const {
+  PaymentStatus,
+  VerificationStatus,
+  IssuanceStatus,
+} = require('./issuance-status.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -217,6 +222,9 @@ module.exports = {
   ORDER_STATUS_VALUES,
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
+  PaymentStatus,
+  VerificationStatus,
+  IssuanceStatus,
   createDatabase,
   createDevice,
   createPlan,
