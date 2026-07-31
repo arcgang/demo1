@@ -7,6 +7,7 @@ const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
 const { recalculateCart } = require('./cart.js');
+const { resolveMarket } = require('./market.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -204,5 +205,6 @@ module.exports = {
   getAttachmentsForDevicePlan,
   recommend,
   recalculateCart,
+  resolveMarket,
   seed,
 };
