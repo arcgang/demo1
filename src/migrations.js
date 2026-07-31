@@ -103,6 +103,40 @@ const MIGRATIONS = [
       `);
     },
   },
+  {
+    version: 4,
+    name: 'create_carts',
+    up(db) {
+      // Carts: an in-progress telecom configuration a shopper is building,
+      // anchored to a device with an optional plan. `updated_at` tracks the
+      // last time the cart was touched so stale carts can be reasoned about.
+      db.exec(`
+        CREATE TABLE carts (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          device_id  INTEGER NOT NULL REFERENCES devices(id),
+          plan_id    INTEGER          REFERENCES plans(id),
+          updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Cart selected attachments: the OPTIONAL attachment ids a shopper has
+      // selected for a cart. Required attachments are implied by the pairing
+      // and need not be recorded here. Rows are removed with their parent cart.
+      db.exec(`
+        CREATE TABLE cart_selected_attachments (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          cart_id       INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+          attachment_id INTEGER NOT NULL REFERENCES attachments(id)
+        );
+      `);
+
+      db.exec(`CREATE INDEX idx_carts_device ON carts(device_id);`);
+      db.exec(`CREATE INDEX idx_csa_cart ON cart_selected_attachments(cart_id);`);
+      db.exec(
+        `CREATE INDEX idx_csa_attachment ON cart_selected_attachments(attachment_id);`,
+      );
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
