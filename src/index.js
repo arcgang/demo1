@@ -4,6 +4,11 @@ const { DatabaseSync } = require('node:sqlite');
 
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
 const {
+  DEVICE_FAMILY,
+  DEVICE_FAMILY_VALUES,
+  isValidDeviceFamily,
+} = require('./device-family.js');
+const {
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
@@ -305,10 +310,57 @@ function getOrderByReference(db, orderReference) {
   return shapeOrderRow(row);
 }
 
+// ---------------------------------------------------------------------------
+// Accessory compatibility
+// ---------------------------------------------------------------------------
+
+// Record that an accessory is compatible with a device family. The
+// accessory-id and family are validated here (in addition to the schema's
+// foreign key / CHECK) so callers get a clear, early error rather than a raw
+// SQL constraint failure. An invalid accessory id still surfaces from the
+// foreign-key constraint at insert time. Recording the same family twice for an
+// accessory is a no-op (the row is left in place) so the setter is idempotent.
+function addAccessoryCompatibility(db, { accessoryId, family } = {}) {
+  if (accessoryId === undefined || accessoryId === null) {
+    throw new Error('accessoryId is required');
+  }
+  if (family === undefined || family === null) {
+    throw new Error('family is mandatory');
+  }
+  if (!isValidDeviceFamily(family)) {
+    throw new Error(
+      `family must be one of ${DEVICE_FAMILY_VALUES.join(', ')}; received "${family}"`,
+    );
+  }
+
+  const info = db
+    .prepare(
+      `INSERT INTO accessory_compatibility (accessory_id, family) VALUES (?, ?)
+       ON CONFLICT (accessory_id, family) DO NOTHING`,
+    )
+    .run(accessoryId, family);
+
+  return { accessoryId, family, created: info.changes > 0 };
+}
+
+// List the device families an accessory is compatible with, as an ordered
+// array of family strings. Returns an empty array when nothing is recorded.
+function getCompatibleFamilies(db, accessoryId) {
+  return db
+    .prepare(
+      'SELECT family FROM accessory_compatibility WHERE accessory_id = ? ORDER BY family',
+    )
+    .all(accessoryId)
+    .map((row) => row.family);
+}
+
 module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
   isValidRequirement,
+  DEVICE_FAMILY,
+  DEVICE_FAMILY_VALUES,
+  isValidDeviceFamily,
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
@@ -372,6 +424,8 @@ module.exports = {
   generateOrderReference,
   createOrder,
   getOrderByReference,
+  addAccessoryCompatibility,
+  getCompatibleFamilies,
   verify,
   seed,
 };
