@@ -55,6 +55,22 @@ const {
 } = require('./reason-codes.js');
 const { AppError, fromReasonCode } = require('./app-error.js');
 const { toUserFacingError } = require('./user-facing-error.js');
+const {
+  MESSAGE_SEVERITY,
+  MESSAGE_SEVERITY_VALUES,
+  isValidMessageSeverity,
+  MESSAGE_TARGET,
+  MESSAGE_TARGET_VALUES,
+  isValidMessageTarget,
+  ARIA_LIVE,
+  ARIA_LIVE_VALUES,
+  ariaLiveForSeverity,
+  fieldMessage,
+  liveRegionMessage,
+  fieldMessageFromError,
+  isValidMessage,
+  buildFieldMessageResponse,
+} = require('./field-messages.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -352,6 +368,20 @@ module.exports = {
   AppError,
   fromReasonCode,
   toUserFacingError,
+  MESSAGE_SEVERITY,
+  MESSAGE_SEVERITY_VALUES,
+  isValidMessageSeverity,
+  MESSAGE_TARGET,
+  MESSAGE_TARGET_VALUES,
+  isValidMessageTarget,
+  ARIA_LIVE,
+  ARIA_LIVE_VALUES,
+  ariaLiveForSeverity,
+  fieldMessage,
+  liveRegionMessage,
+  fieldMessageFromError,
+  isValidMessage,
+  buildFieldMessageResponse,
   createDatabase,
   createDevice,
   createPlan,
