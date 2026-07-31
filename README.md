@@ -20,6 +20,16 @@ const {
   AppError,
   fromReasonCode,
   toUserFacingError,
+  // Structured field/status message contract (see below).
+  MESSAGE_SEVERITY,
+  MESSAGE_TARGET,
+  ARIA_LIVE,
+  ariaLiveForSeverity,
+  fieldMessage,
+  liveRegionMessage,
+  fieldMessageFromError,
+  isValidMessage,
+  buildFieldMessageResponse,
 } = require('./src/index.js');
 ```
 
@@ -139,3 +149,105 @@ const normalized = toUserFacingError(new AppError(REASON_CODE.UNKNOWN_DEVICE));
 Because the category is `RETRYABLE`, `retryable` is `true`, so a UI can safely
 offer the "Return to the catalog and pick an available device" next step as a
 retry.
+
+## Structured field/status message contract
+
+The `toUserFacingError` shape above answers *what went wrong*. For checkout and
+onboarding endpoints the API layer also needs to say *which field it went wrong
+on*, so an accessible frontend can bind each message to the correct form field
+or announce it in a live region. That per-field contract lives in
+[`src/field-messages.js`](src/field-messages.js) and is re-exported from
+`src/index.js`.
+
+Every validation / status / error message is a plain, JSON-serializable object
+carrying exactly these fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `target` | `MESSAGE_TARGET` value | Where to bind the message: `FIELD` or `LIVE_REGION`. |
+| `field` | string \| null | The machine-usable field identifier (e.g. `porting.msisdn`) for a `FIELD` message; always `null` for a `LIVE_REGION` message. |
+| `message` | string | The (non-empty) customer-facing text to render. |
+| `severity` | `MESSAGE_SEVERITY` value | How serious the message is (see below). |
+| `ariaLive` | `ARIA_LIVE` value | The ARIA live-region politeness to announce with; derived from `severity`. |
+| `reasonCode` | `REASON_CODE` value \| null | Links the message back to the reason-code catalog when it came from a failure; otherwise `null`. |
+
+### Targets: field binding vs. live region
+
+`MESSAGE_TARGET` tells the frontend how to surface the message for assistive
+technologies:
+
+| Target | Binding |
+| --- | --- |
+| `FIELD` | An inline message bound to a specific form field via its `field` identifier (e.g. an inline validation error under `customer.idDocumentNumber`). |
+| `LIVE_REGION` | A form/page-level announcement bound to an ARIA live region rather than a single field (e.g. a "Please fix the highlighted fields" error summary, or a "payment pending" status). Its `field` is always `null`. |
+
+### Severities and the ARIA live-region politeness mapping
+
+`MESSAGE_SEVERITY` has four values — `ERROR`, `WARNING`, `INFO`, `SUCCESS`. The
+`ariaLive` field is *derived from* the severity by `ariaLiveForSeverity`, so a
+live region announces with the right urgency for assistive technologies:
+
+| Severity | `ariaLive` |
+| --- | --- |
+| `ERROR` | `assertive` |
+| `WARNING` | `assertive` |
+| `INFO` | `polite` |
+| `SUCCESS` | `polite` |
+
+`ERROR`/`WARNING` map to `assertive` (announced immediately, interrupting);
+`INFO`/`SUCCESS` map to `polite` (announced when the user is idle). `ARIA_LIVE`
+exposes those two politeness values (`{ ASSERTIVE: 'assertive', POLITE:
+'polite' }`).
+
+### Builders
+
+- `fieldMessage(field, message, { severity, reasonCode })` — a message bound to
+  a field. Defaults `severity` to `ERROR`.
+- `liveRegionMessage(message, { severity, reasonCode })` — a message bound to a
+  live region. Defaults `severity` to `INFO`; `field` is always `null`.
+- `fieldMessageFromError(err, field, { severity })` — normalizes any thrown
+  value through `toUserFacingError` and binds the resulting customer-facing
+  message (and its `reasonCode`) to `field`. A raw `Error` is downgraded to
+  `UNEXPECTED` and its own message never leaks.
+- `isValidMessage(msg)` — structural predicate for a well-formed message.
+
+### Response envelope
+
+`buildFieldMessageResponse(messages, { correlationId })` assembles the endpoint
+response the API layer serializes: the `messages` array (a defensive copy),
+the `correlationId` (defaulting to `null`), and `hasErrors` — `true` when any
+message has `ERROR` severity, so the frontend can tell a failed submission from
+an advisory one.
+
+```json
+{
+  "messages": [
+    {
+      "target": "FIELD",
+      "field": "porting.msisdn",
+      "message": "Enter the number you want to port in.",
+      "severity": "ERROR",
+      "ariaLive": "assertive",
+      "reasonCode": null
+    },
+    {
+      "target": "FIELD",
+      "field": "customer.idDocumentNumber",
+      "message": "This ID number is not valid.",
+      "severity": "ERROR",
+      "ariaLive": "assertive",
+      "reasonCode": null
+    },
+    {
+      "target": "LIVE_REGION",
+      "field": null,
+      "message": "Please fix the highlighted fields.",
+      "severity": "ERROR",
+      "ariaLive": "assertive",
+      "reasonCode": null
+    }
+  ],
+  "correlationId": "corr_12af",
+  "hasErrors": true
+}
+```
