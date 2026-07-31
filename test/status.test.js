@@ -2,47 +2,42 @@
 
 // Acceptance tests (unit): the shared order/activation status vocabulary.
 //
-// `src/status.js` follows the `src/requirement.js` pattern and is the single
-// source of truth for the status strings used by schema CHECK constraints and
-// the application layer. It models the journey as a set of PHASES, each with
-// its own meaningful state values (NOT a generic "pending only" vocabulary):
+// `src/status.js` mirrors the `src/requirement.js` pattern and is the single
+// source of truth for the status strings consumed by the schema CHECK
+// constraints and the service layer. Per the authoritative LLD contract it
+// exposes TWO frozen vocabularies:
 //
-//   STATUS_PHASES              frozen enum: PAYMENT, VERIFICATION, FULFILMENT, ACTIVATION
+//   MILESTONE            frozen enum of the journey domains the status timeline
+//                        aggregates: PAYMENT, VERIFICATION, FULFILMENT, ACTIVATION
+//   STATUS_STATE         frozen enum of the meaningful states a milestone can be
+//                        in — deliberately richer than a generic "pending":
+//                        PENDING, IN_PROGRESS, COMPLETE, BLOCKED, FAILED
 //
-//   PAYMENT_STATUS             frozen enum: PENDING, AUTHORIZED, FAILED
-//   VERIFICATION_STATUS        frozen enum: NOT_REQUIRED, PENDING, PASSED, FAILED
-//   FULFILMENT_STATUS          frozen enum: PENDING, IN_PROGRESS, COMPLETED
-//   ACTIVATION_STATUS          frozen enum: PENDING, BLOCKED, ACTIVE, FAILED
+//   MILESTONE_VALUES     frozen array === Object.values(MILESTONE)
+//   STATUS_STATE_VALUES  frozen array === Object.values(STATUS_STATE)
 //
-//   <PHASE>_STATUS_VALUES      frozen array of each phase's enum values
+//   isValidMilestone(value)    -> boolean
+//   isValidStatusState(value)  -> boolean
 //
-//   isValidPaymentStatus(value)      -> boolean
-//   isValidVerificationStatus(value) -> boolean
-//   isValidFulfilmentStatus(value)   -> boolean
-//   isValidActivationStatus(value)   -> boolean
-//
-// Every enum/list/helper is also re-exported from src/index.js.
-//
-// These tests are written BEFORE the module is (re)implemented and must fail
-// until the phase-based vocabulary exists.
+// These tests are written BEFORE the module is (re)implemented and must FAIL
+// until the MILESTONE / STATUS_STATE vocabulary exists.
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
 const status = require('../src/status.js');
-const model = require('../src/index.js');
 
 // ---------------------------------------------------------------------------
-// STATUS_PHASES enum
+// MILESTONE map
 // ---------------------------------------------------------------------------
 
-test('exports a STATUS_PHASES object', () => {
-  assert.equal(typeof status.STATUS_PHASES, 'object');
-  assert.notEqual(status.STATUS_PHASES, null);
+test('exports a MILESTONE object', () => {
+  assert.equal(typeof status.MILESTONE, 'object');
+  assert.notEqual(status.MILESTONE, null);
 });
 
-test('STATUS_PHASES has exactly the four phases mapping to their own names', () => {
-  assert.deepEqual(status.STATUS_PHASES, {
+test('MILESTONE covers exactly the four required domains, each mapping to its own name', () => {
+  assert.deepEqual(status.MILESTONE, {
     PAYMENT: 'PAYMENT',
     VERIFICATION: 'VERIFICATION',
     FULFILMENT: 'FULFILMENT',
@@ -50,292 +45,142 @@ test('STATUS_PHASES has exactly the four phases mapping to their own names', () 
   });
 });
 
-test('STATUS_PHASES is frozen', () => {
-  assert.equal(Object.isFrozen(status.STATUS_PHASES), true);
+test('MILESTONE is frozen', () => {
+  assert.equal(Object.isFrozen(status.MILESTONE), true);
 });
 
-test('STATUS_PHASES cannot be mutated or extended', () => {
+test('MILESTONE cannot be mutated or extended', () => {
   assert.throws(() => {
     'use strict';
-    status.STATUS_PHASES.PAYMENT = 'CHANGED';
+    status.MILESTONE.PAYMENT = 'CHANGED';
   });
   assert.throws(() => {
     'use strict';
-    status.STATUS_PHASES.BILLING = 'BILLING';
+    status.MILESTONE.BILLING = 'BILLING';
   });
-  assert.equal(status.STATUS_PHASES.PAYMENT, 'PAYMENT');
-  assert.equal(status.STATUS_PHASES.BILLING, undefined);
+  assert.equal(status.MILESTONE.PAYMENT, 'PAYMENT');
+  assert.equal(status.MILESTONE.BILLING, undefined);
 });
 
-// ---------------------------------------------------------------------------
-// PAYMENT_STATUS: PENDING / AUTHORIZED / FAILED
-// ---------------------------------------------------------------------------
-
-test('PAYMENT_STATUS has exactly its three meaningful members', () => {
-  assert.deepEqual(status.PAYMENT_STATUS, {
-    PENDING: 'PENDING',
-    AUTHORIZED: 'AUTHORIZED',
-    FAILED: 'FAILED',
-  });
-});
-
-test('PAYMENT_STATUS is frozen and cannot gain members', () => {
-  assert.equal(Object.isFrozen(status.PAYMENT_STATUS), true);
-  assert.throws(() => {
-    'use strict';
-    status.PAYMENT_STATUS.REFUNDED = 'REFUNDED';
-  });
-  assert.equal(status.PAYMENT_STATUS.REFUNDED, undefined);
-});
-
-test('PAYMENT_STATUS_VALUES is a frozen array matching Object.values(PAYMENT_STATUS)', () => {
-  assert.ok(Array.isArray(status.PAYMENT_STATUS_VALUES));
-  assert.equal(Object.isFrozen(status.PAYMENT_STATUS_VALUES), true);
-  assert.deepEqual([...status.PAYMENT_STATUS_VALUES], Object.values(status.PAYMENT_STATUS));
-  assert.deepEqual([...status.PAYMENT_STATUS_VALUES].sort(), ['AUTHORIZED', 'FAILED', 'PENDING']);
-});
-
-test('isValidPaymentStatus accepts every PAYMENT_STATUS value', () => {
-  assert.equal(typeof status.isValidPaymentStatus, 'function');
-  for (const value of Object.values(status.PAYMENT_STATUS)) {
-    assert.equal(status.isValidPaymentStatus(value), true, `expected ${value} to be valid`);
-  }
-});
-
-test('isValidPaymentStatus rejects unknown / malformed values', () => {
-  assert.equal(status.isValidPaymentStatus('REFUNDED'), false);
-  assert.equal(status.isValidPaymentStatus('authorized'), false);
-  assert.equal(status.isValidPaymentStatus(''), false);
-  assert.equal(status.isValidPaymentStatus(undefined), false);
-  assert.equal(status.isValidPaymentStatus(null), false);
-  assert.equal(status.isValidPaymentStatus(0), false);
-});
-
-test('isValidPaymentStatus rejects states meaningful only to other phases', () => {
-  assert.equal(status.isValidPaymentStatus('NOT_REQUIRED'), false);
-  assert.equal(status.isValidPaymentStatus('IN_PROGRESS'), false);
-  assert.equal(status.isValidPaymentStatus('ACTIVE'), false);
-  assert.equal(status.isValidPaymentStatus('BLOCKED'), false);
-});
-
-// ---------------------------------------------------------------------------
-// VERIFICATION_STATUS: NOT_REQUIRED / PENDING / PASSED / FAILED
-// ---------------------------------------------------------------------------
-
-test('VERIFICATION_STATUS has exactly its four meaningful members', () => {
-  assert.deepEqual(status.VERIFICATION_STATUS, {
-    NOT_REQUIRED: 'NOT_REQUIRED',
-    PENDING: 'PENDING',
-    PASSED: 'PASSED',
-    FAILED: 'FAILED',
-  });
-});
-
-test('VERIFICATION_STATUS is frozen and cannot gain members', () => {
-  assert.equal(Object.isFrozen(status.VERIFICATION_STATUS), true);
-  assert.throws(() => {
-    'use strict';
-    status.VERIFICATION_STATUS.REVIEW = 'REVIEW';
-  });
-  assert.equal(status.VERIFICATION_STATUS.REVIEW, undefined);
-});
-
-test('VERIFICATION_STATUS_VALUES is a frozen array matching Object.values(VERIFICATION_STATUS)', () => {
-  assert.ok(Array.isArray(status.VERIFICATION_STATUS_VALUES));
-  assert.equal(Object.isFrozen(status.VERIFICATION_STATUS_VALUES), true);
+test('MILESTONE_VALUES is a frozen array matching Object.values(MILESTONE)', () => {
+  assert.ok(Array.isArray(status.MILESTONE_VALUES));
+  assert.equal(Object.isFrozen(status.MILESTONE_VALUES), true);
+  assert.deepEqual([...status.MILESTONE_VALUES], Object.values(status.MILESTONE));
   assert.deepEqual(
-    [...status.VERIFICATION_STATUS_VALUES],
-    Object.values(status.VERIFICATION_STATUS),
-  );
-  assert.deepEqual(
-    [...status.VERIFICATION_STATUS_VALUES].sort(),
-    ['FAILED', 'NOT_REQUIRED', 'PASSED', 'PENDING'],
+    [...status.MILESTONE_VALUES].sort(),
+    ['ACTIVATION', 'FULFILMENT', 'PAYMENT', 'VERIFICATION'],
   );
 });
 
-test('isValidVerificationStatus accepts every VERIFICATION_STATUS value', () => {
-  assert.equal(typeof status.isValidVerificationStatus, 'function');
-  for (const value of Object.values(status.VERIFICATION_STATUS)) {
-    assert.equal(status.isValidVerificationStatus(value), true, `expected ${value} to be valid`);
+test('isValidMilestone accepts every MILESTONE value', () => {
+  assert.equal(typeof status.isValidMilestone, 'function');
+  for (const value of Object.values(status.MILESTONE)) {
+    assert.equal(status.isValidMilestone(value), true, `expected ${value} to be valid`);
   }
 });
 
-test('isValidVerificationStatus rejects unknown / malformed values', () => {
-  assert.equal(status.isValidVerificationStatus('REVIEW'), false);
-  assert.equal(status.isValidVerificationStatus('passed'), false);
-  assert.equal(status.isValidVerificationStatus(''), false);
-  assert.equal(status.isValidVerificationStatus(undefined), false);
-  assert.equal(status.isValidVerificationStatus(null), false);
+test('isValidMilestone rejects unknown / malformed values', () => {
+  assert.equal(status.isValidMilestone('BILLING'), false);
+  assert.equal(status.isValidMilestone('payment'), false);
+  assert.equal(status.isValidMilestone('PAYMENT '), false);
+  assert.equal(status.isValidMilestone(''), false);
+  assert.equal(status.isValidMilestone(undefined), false);
+  assert.equal(status.isValidMilestone(null), false);
+  assert.equal(status.isValidMilestone(0), false);
+  assert.equal(status.isValidMilestone({}), false);
 });
 
-test('isValidVerificationStatus rejects states meaningful only to other phases', () => {
-  assert.equal(status.isValidVerificationStatus('AUTHORIZED'), false);
-  assert.equal(status.isValidVerificationStatus('IN_PROGRESS'), false);
-  assert.equal(status.isValidVerificationStatus('ACTIVE'), false);
+test('isValidMilestone rejects status-state values (the two vocabularies are distinct)', () => {
+  assert.equal(status.isValidMilestone('PENDING'), false);
+  assert.equal(status.isValidMilestone('COMPLETE'), false);
+  assert.equal(status.isValidMilestone('BLOCKED'), false);
 });
 
 // ---------------------------------------------------------------------------
-// FULFILMENT_STATUS: PENDING / IN_PROGRESS / COMPLETED
+// STATUS_STATE map
 // ---------------------------------------------------------------------------
 
-test('FULFILMENT_STATUS has exactly its three meaningful members', () => {
-  assert.deepEqual(status.FULFILMENT_STATUS, {
+test('exports a STATUS_STATE object', () => {
+  assert.equal(typeof status.STATUS_STATE, 'object');
+  assert.notEqual(status.STATUS_STATE, null);
+});
+
+test('STATUS_STATE has exactly the five meaningful states, each mapping to its own name', () => {
+  assert.deepEqual(status.STATUS_STATE, {
     PENDING: 'PENDING',
     IN_PROGRESS: 'IN_PROGRESS',
-    COMPLETED: 'COMPLETED',
-  });
-});
-
-test('FULFILMENT_STATUS is frozen and cannot gain members', () => {
-  assert.equal(Object.isFrozen(status.FULFILMENT_STATUS), true);
-  assert.throws(() => {
-    'use strict';
-    status.FULFILMENT_STATUS.CANCELLED = 'CANCELLED';
-  });
-  assert.equal(status.FULFILMENT_STATUS.CANCELLED, undefined);
-});
-
-test('FULFILMENT_STATUS_VALUES is a frozen array matching Object.values(FULFILMENT_STATUS)', () => {
-  assert.ok(Array.isArray(status.FULFILMENT_STATUS_VALUES));
-  assert.equal(Object.isFrozen(status.FULFILMENT_STATUS_VALUES), true);
-  assert.deepEqual([...status.FULFILMENT_STATUS_VALUES], Object.values(status.FULFILMENT_STATUS));
-  assert.deepEqual(
-    [...status.FULFILMENT_STATUS_VALUES].sort(),
-    ['COMPLETED', 'IN_PROGRESS', 'PENDING'],
-  );
-});
-
-test('isValidFulfilmentStatus accepts every FULFILMENT_STATUS value', () => {
-  assert.equal(typeof status.isValidFulfilmentStatus, 'function');
-  for (const value of Object.values(status.FULFILMENT_STATUS)) {
-    assert.equal(status.isValidFulfilmentStatus(value), true, `expected ${value} to be valid`);
-  }
-});
-
-test('isValidFulfilmentStatus rejects unknown / malformed values', () => {
-  assert.equal(status.isValidFulfilmentStatus('CANCELLED'), false);
-  assert.equal(status.isValidFulfilmentStatus('completed'), false);
-  assert.equal(status.isValidFulfilmentStatus(''), false);
-  assert.equal(status.isValidFulfilmentStatus(undefined), false);
-  assert.equal(status.isValidFulfilmentStatus(null), false);
-});
-
-test('isValidFulfilmentStatus rejects states meaningful only to other phases', () => {
-  assert.equal(status.isValidFulfilmentStatus('AUTHORIZED'), false);
-  assert.equal(status.isValidFulfilmentStatus('NOT_REQUIRED'), false);
-  assert.equal(status.isValidFulfilmentStatus('ACTIVE'), false);
-});
-
-// ---------------------------------------------------------------------------
-// ACTIVATION_STATUS: PENDING / BLOCKED / ACTIVE / FAILED
-// ---------------------------------------------------------------------------
-
-test('ACTIVATION_STATUS has exactly its four meaningful members', () => {
-  assert.deepEqual(status.ACTIVATION_STATUS, {
-    PENDING: 'PENDING',
+    COMPLETE: 'COMPLETE',
     BLOCKED: 'BLOCKED',
-    ACTIVE: 'ACTIVE',
     FAILED: 'FAILED',
   });
 });
 
-test('ACTIVATION_STATUS is frozen and cannot gain members', () => {
-  assert.equal(Object.isFrozen(status.ACTIVATION_STATUS), true);
-  assert.throws(() => {
-    'use strict';
-    status.ACTIVATION_STATUS.SUSPENDED = 'SUSPENDED';
-  });
-  assert.equal(status.ACTIVATION_STATUS.SUSPENDED, undefined);
+test('STATUS_STATE carries meaningful states beyond a generic PENDING', () => {
+  const beyondPending = Object.values(status.STATUS_STATE).filter((v) => v !== 'PENDING');
+  assert.deepEqual(beyondPending.sort(), ['BLOCKED', 'COMPLETE', 'FAILED', 'IN_PROGRESS']);
 });
 
-test('ACTIVATION_STATUS_VALUES is a frozen array matching Object.values(ACTIVATION_STATUS)', () => {
-  assert.ok(Array.isArray(status.ACTIVATION_STATUS_VALUES));
-  assert.equal(Object.isFrozen(status.ACTIVATION_STATUS_VALUES), true);
-  assert.deepEqual([...status.ACTIVATION_STATUS_VALUES], Object.values(status.ACTIVATION_STATUS));
+test('STATUS_STATE is frozen', () => {
+  assert.equal(Object.isFrozen(status.STATUS_STATE), true);
+});
+
+test('STATUS_STATE cannot be mutated or extended', () => {
+  assert.throws(() => {
+    'use strict';
+    status.STATUS_STATE.PENDING = 'CHANGED';
+  });
+  assert.throws(() => {
+    'use strict';
+    status.STATUS_STATE.CANCELLED = 'CANCELLED';
+  });
+  assert.equal(status.STATUS_STATE.PENDING, 'PENDING');
+  assert.equal(status.STATUS_STATE.CANCELLED, undefined);
+});
+
+test('STATUS_STATE_VALUES is a frozen array matching Object.values(STATUS_STATE)', () => {
+  assert.ok(Array.isArray(status.STATUS_STATE_VALUES));
+  assert.equal(Object.isFrozen(status.STATUS_STATE_VALUES), true);
+  assert.deepEqual([...status.STATUS_STATE_VALUES], Object.values(status.STATUS_STATE));
   assert.deepEqual(
-    [...status.ACTIVATION_STATUS_VALUES].sort(),
-    ['ACTIVE', 'BLOCKED', 'FAILED', 'PENDING'],
+    [...status.STATUS_STATE_VALUES].sort(),
+    ['BLOCKED', 'COMPLETE', 'FAILED', 'IN_PROGRESS', 'PENDING'],
   );
 });
 
-test('isValidActivationStatus accepts every ACTIVATION_STATUS value', () => {
-  assert.equal(typeof status.isValidActivationStatus, 'function');
-  for (const value of Object.values(status.ACTIVATION_STATUS)) {
-    assert.equal(status.isValidActivationStatus(value), true, `expected ${value} to be valid`);
+test('isValidStatusState accepts every STATUS_STATE value', () => {
+  assert.equal(typeof status.isValidStatusState, 'function');
+  for (const value of Object.values(status.STATUS_STATE)) {
+    assert.equal(status.isValidStatusState(value), true, `expected ${value} to be valid`);
   }
 });
 
-test('isValidActivationStatus rejects unknown / malformed values', () => {
-  assert.equal(status.isValidActivationStatus('SUSPENDED'), false);
-  assert.equal(status.isValidActivationStatus('active'), false);
-  assert.equal(status.isValidActivationStatus(''), false);
-  assert.equal(status.isValidActivationStatus(undefined), false);
-  assert.equal(status.isValidActivationStatus(null), false);
+test('isValidStatusState rejects unknown / malformed values', () => {
+  assert.equal(status.isValidStatusState('CANCELLED'), false);
+  assert.equal(status.isValidStatusState('complete'), false);
+  assert.equal(status.isValidStatusState('COMPLETE '), false);
+  assert.equal(status.isValidStatusState(''), false);
+  assert.equal(status.isValidStatusState(undefined), false);
+  assert.equal(status.isValidStatusState(null), false);
+  assert.equal(status.isValidStatusState(0), false);
+  assert.equal(status.isValidStatusState({}), false);
 });
 
-test('isValidActivationStatus rejects states meaningful only to other phases', () => {
-  assert.equal(status.isValidActivationStatus('AUTHORIZED'), false);
-  assert.equal(status.isValidActivationStatus('NOT_REQUIRED'), false);
-  assert.equal(status.isValidActivationStatus('IN_PROGRESS'), false);
-  assert.equal(status.isValidActivationStatus('COMPLETED'), false);
-});
-
-// ---------------------------------------------------------------------------
-// Cross-phase distinctness: this is NOT a generic "pending only" vocabulary
-// ---------------------------------------------------------------------------
-
-test('each phase carries meaningful states beyond a shared PENDING', () => {
-  // PENDING is the only value shared by all four phases; every phase must add
-  // its own distinct, meaningful states.
-  const only = (arr, shared) => [...arr].filter((v) => !shared.includes(v));
-  const SHARED = ['PENDING'];
-  assert.deepEqual(only(status.PAYMENT_STATUS_VALUES, SHARED).sort(), ['AUTHORIZED', 'FAILED']);
-  assert.deepEqual(
-    only(status.VERIFICATION_STATUS_VALUES, SHARED).sort(),
-    ['FAILED', 'NOT_REQUIRED', 'PASSED'],
-  );
-  assert.deepEqual(
-    only(status.FULFILMENT_STATUS_VALUES, SHARED).sort(),
-    ['COMPLETED', 'IN_PROGRESS'],
-  );
-  assert.deepEqual(
-    only(status.ACTIVATION_STATUS_VALUES, SHARED).sort(),
-    ['ACTIVE', 'BLOCKED', 'FAILED'],
-  );
-});
-
-test('PENDING is a valid state in every phase', () => {
-  assert.equal(status.isValidPaymentStatus('PENDING'), true);
-  assert.equal(status.isValidVerificationStatus('PENDING'), true);
-  assert.equal(status.isValidFulfilmentStatus('PENDING'), true);
-  assert.equal(status.isValidActivationStatus('PENDING'), true);
+test('isValidStatusState rejects milestone-domain values (the two vocabularies are distinct)', () => {
+  assert.equal(status.isValidStatusState('PAYMENT'), false);
+  assert.equal(status.isValidStatusState('VERIFICATION'), false);
+  assert.equal(status.isValidStatusState('ACTIVATION'), false);
 });
 
 // ---------------------------------------------------------------------------
-// Re-export from the model API (src/index.js) — same references
+// Completeness / shape guarantees
 // ---------------------------------------------------------------------------
 
-test('STATUS_PHASES is re-exported from src/index.js (same reference)', () => {
-  assert.equal(model.STATUS_PHASES, status.STATUS_PHASES);
+test('MILESTONE has exactly four members', () => {
+  assert.equal(Object.keys(status.MILESTONE).length, 4);
+  assert.equal(status.MILESTONE_VALUES.length, 4);
 });
 
-test('each phase enum is re-exported from src/index.js (same reference)', () => {
-  assert.equal(model.PAYMENT_STATUS, status.PAYMENT_STATUS);
-  assert.equal(model.VERIFICATION_STATUS, status.VERIFICATION_STATUS);
-  assert.equal(model.FULFILMENT_STATUS, status.FULFILMENT_STATUS);
-  assert.equal(model.ACTIVATION_STATUS, status.ACTIVATION_STATUS);
-});
-
-test('each phase value list is re-exported from src/index.js (same reference)', () => {
-  assert.equal(model.PAYMENT_STATUS_VALUES, status.PAYMENT_STATUS_VALUES);
-  assert.equal(model.VERIFICATION_STATUS_VALUES, status.VERIFICATION_STATUS_VALUES);
-  assert.equal(model.FULFILMENT_STATUS_VALUES, status.FULFILMENT_STATUS_VALUES);
-  assert.equal(model.ACTIVATION_STATUS_VALUES, status.ACTIVATION_STATUS_VALUES);
-});
-
-test('each isValid* helper is re-exported from src/index.js', () => {
-  assert.equal(model.isValidPaymentStatus, status.isValidPaymentStatus);
-  assert.equal(model.isValidVerificationStatus, status.isValidVerificationStatus);
-  assert.equal(model.isValidFulfilmentStatus, status.isValidFulfilmentStatus);
-  assert.equal(model.isValidActivationStatus, status.isValidActivationStatus);
+test('STATUS_STATE has exactly five members', () => {
+  assert.equal(Object.keys(status.STATUS_STATE).length, 5);
+  assert.equal(status.STATUS_STATE_VALUES.length, 5);
 });

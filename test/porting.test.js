@@ -483,7 +483,7 @@ test('isValidPortingOutcome is re-exported from src/index.js', () => {
 
 test('adding porting exports does not disturb the existing re-exports', () => {
   assert.equal(model.isValidRequirement('REQUIRED'), true);
-  assert.equal(model.isValidPaymentStatus('CONFIRMED'), true);
-  assert.equal(model.isValidActivationStatus('ACTIVATED'), true);
+  assert.equal(model.isValidMilestone('PAYMENT'), true);
+  assert.equal(model.isValidStatusState('COMPLETE'), true);
   assert.equal(model.isValidOrderStatus('PENDING'), true);
 });
