@@ -11,6 +11,11 @@ const {
   ACTIVATION_STATUS_VALUES,
   isValidActivationStatus,
 } = require('./status.js');
+const {
+  FULFILMENT_TYPE,
+  FULFILMENT_TYPE_VALUES,
+  isValidFulfilmentType,
+} = require('./fulfilmentType.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -207,6 +212,9 @@ module.exports = {
   ACTIVATION_STATUS,
   ACTIVATION_STATUS_VALUES,
   isValidActivationStatus,
+  FULFILMENT_TYPE,
+  FULFILMENT_TYPE_VALUES,
+  isValidFulfilmentType,
   createDatabase,
   createDevice,
   createPlan,

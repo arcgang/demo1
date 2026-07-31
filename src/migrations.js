@@ -1,6 +1,7 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { FULFILMENT_TYPE } = require('./fulfilmentType.js');
 
 // Ordered list of migrations. Each migration has a monotonically increasing
 // `version` and an `up(db)` that applies its schema change. `runMigrations`
@@ -135,6 +136,41 @@ const MIGRATIONS = [
       db.exec(
         `CREATE INDEX idx_csa_attachment ON cart_selected_attachments(attachment_id);`,
       );
+    },
+  },
+  {
+    version: 5,
+    name: 'create_sim_offers',
+    up(db) {
+      // SIM offers: a purchasable SIM/eSIM offer with a name, a SIM/ESIM
+      // fulfilment_type, a non-negative price, and an optional default plan.
+      //
+      // Constraints encoded in the schema:
+      //  - fulfilment_type must be one of the known values (SIM/ESIM).
+      //  - price is a non-negative REAL (mirrors the catalog price columns).
+      //  - default_plan_id is nullable and references a plan when present.
+      db.exec(`
+        CREATE TABLE sim_offers (
+          id              INTEGER PRIMARY KEY AUTOINCREMENT,
+          name            TEXT    NOT NULL,
+          fulfilment_type TEXT    NOT NULL CHECK (fulfilment_type IN ('${FULFILMENT_TYPE.SIM}', '${FULFILMENT_TYPE.ESIM}')),
+          price           REAL    NOT NULL DEFAULT 0 CHECK (price >= 0),
+          default_plan_id INTEGER          REFERENCES plans(id)
+        );
+      `);
+
+      // Eligible plans: the associated plan choices available for each offer.
+      // Rows are removed with their parent offer.
+      db.exec(`
+        CREATE TABLE sim_offer_eligible_plans (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          sim_offer_id INTEGER NOT NULL REFERENCES sim_offers(id) ON DELETE CASCADE,
+          plan_id      INTEGER NOT NULL REFERENCES plans(id)
+        );
+      `);
+
+      db.exec(`CREATE INDEX idx_soep_offer ON sim_offer_eligible_plans(sim_offer_id);`);
+      db.exec(`CREATE INDEX idx_soep_plan ON sim_offer_eligible_plans(plan_id);`);
     },
   },
 ];

@@ -82,9 +82,11 @@ test('migration version 4 exists and follows the established pattern', () => {
 
   assert.ok(versions.includes(4), 'expected a migration with version 4');
 
-  // Versions must remain a monotonically increasing, gap-free sequence.
+  // Versions must remain a monotonically increasing, gap-free sequence
+  // starting at 1 (later tasks may append further migrations beyond 4).
   const sorted = [...versions].sort((a, b) => a - b);
-  assert.deepEqual(sorted, [1, 2, 3, 4], 'migration versions should be 1, 2, 3, 4');
+  const expected = Array.from({ length: sorted.length }, (_, i) => i + 1);
+  assert.deepEqual(sorted, expected, 'migration versions should be a gap-free sequence from 1');
 
   const migration = MIGRATIONS.find((m) => m.version === 4);
   assert.equal(typeof migration.name, 'string', 'migration 4 should have a name');
