@@ -76,6 +76,33 @@ const MIGRATIONS = [
       db.exec(`CREATE INDEX idx_attachments_device_plan ON attachments(device_id, plan_id);`);
     },
   },
+  {
+    version: 3,
+    name: 'create_markets',
+    up(db) {
+      // Markets: the MarketContext data object from the HLD, capturing per-market
+      // localization (currency, default language) and tax configuration that
+      // downstream pricing/checkout logic consumes.
+      //
+      // Constraints encoded in the schema:
+      //  - code is unique (e.g. ZA/TZ) so a market is addressable by its code.
+      //  - tax_rate is a non-negative REAL rate.
+      //  - tax_inclusive is a 0/1 flag: whether displayed prices already
+      //    include tax.
+      db.exec(`
+        CREATE TABLE markets (
+          id               INTEGER PRIMARY KEY AUTOINCREMENT,
+          code             TEXT    NOT NULL UNIQUE,
+          name             TEXT    NOT NULL,
+          currency         TEXT    NOT NULL,
+          default_language TEXT    NOT NULL,
+          tax_rate         REAL    NOT NULL DEFAULT 0 CHECK (tax_rate >= 0),
+          tax_inclusive    INTEGER NOT NULL DEFAULT 0 CHECK (tax_inclusive IN (0, 1)),
+          tax_label        TEXT    NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
