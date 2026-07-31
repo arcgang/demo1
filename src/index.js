@@ -63,6 +63,18 @@ const { resolveMarket } = require('./market.js');
 const { formatPrice, formatMarketPrice } = require('./currency.js');
 const { generateOrderReference } = require('./order-reference.js');
 const { verify } = require('./verification-adapter.js');
+const {
+  PALETTE,
+  CONTRAST_LEVEL,
+  CONTRAST_LEVEL_VALUES,
+  MINIMUM_RATIO,
+  CONTRAST_PAIRS,
+  FOCUS_OUTLINE,
+  relativeLuminance,
+  contrastRatio,
+  meetsMinimumRatio,
+  auditContrastTable,
+} = require('./design-tokens.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -374,4 +386,14 @@ module.exports = {
   getOrderByReference,
   verify,
   seed,
+  PALETTE,
+  CONTRAST_LEVEL,
+  CONTRAST_LEVEL_VALUES,
+  MINIMUM_RATIO,
+  CONTRAST_PAIRS,
+  FOCUS_OUTLINE,
+  relativeLuminance,
+  contrastRatio,
+  meetsMinimumRatio,
+  auditContrastTable,
 };
