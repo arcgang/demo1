@@ -4,6 +4,11 @@ const { DatabaseSync } = require('node:sqlite');
 
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
 const {
+  SIM_OFFER_TYPE,
+  SIM_OFFER_TYPE_VALUES,
+  isValidSimOfferType,
+} = require('./sim-offer.js');
+const {
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
@@ -125,6 +130,84 @@ const getDevices = makeLister('devices');
 const getPlans = makeLister('plans');
 const getBundles = makeLister('bundles');
 const getAccessories = makeLister('accessories');
+
+// ---------------------------------------------------------------------------
+// SIM/eSIM offers
+// ---------------------------------------------------------------------------
+
+// Shape a raw sim_offers row into the object the application layer consumes,
+// exposing the SIM/ESIM type, price, availability, and the onboarding-
+// implication flags as booleans.
+function shapeSimOfferRow(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    name: row.name,
+    type: row.type,
+    price: row.price,
+    availability: row.availability,
+    requiresVerification: Boolean(row.requires_verification),
+    activationRequired: Boolean(row.activation_required),
+  };
+}
+
+// Persist a SIM/eSIM offer row and return the shaped offer. `name` is required,
+// `type` must be one of the SIM/ESIM vocabulary, `price` is validated like a
+// catalog price (defaults to 0, must be non-negative), and the onboarding flags
+// `requiresVerification` (KYC/RICA) and `activationRequired` are stored as 0/1.
+function createSimOffer(
+  db,
+  {
+    name,
+    type,
+    price,
+    availability,
+    requiresVerification = false,
+    activationRequired = false,
+  } = {},
+) {
+  assertName(name);
+  if (!isValidSimOfferType(type)) {
+    throw new Error(
+      `type must be one of ${SIM_OFFER_TYPE_VALUES.join(', ')}; received "${type}"`,
+    );
+  }
+  if (typeof availability !== 'string' || availability.trim() === '') {
+    throw new Error('availability is required');
+  }
+  const finalPrice = normalizePrice(price);
+  const requiresVerificationFlag = requiresVerification ? 1 : 0;
+  const activationRequiredFlag = activationRequired ? 1 : 0;
+
+  const info = db
+    .prepare(
+      `INSERT INTO sim_offers (name, type, price, availability, requires_verification, activation_required)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+    .run(name, type, finalPrice, availability, requiresVerificationFlag, activationRequiredFlag);
+
+  return {
+    id: Number(info.lastInsertRowid),
+    name,
+    type,
+    price: finalPrice,
+    availability,
+    requiresVerification: Boolean(requiresVerificationFlag),
+    activationRequired: Boolean(activationRequiredFlag),
+  };
+}
+
+// List the persisted SIM/eSIM offers (ordered by id), each shaped with its
+// type, price, availability, and onboarding flags.
+function getSimOffers(db) {
+  return db
+    .prepare(
+      `SELECT id, name, type, price, availability, requires_verification, activation_required
+       FROM sim_offers ORDER BY id`,
+    )
+    .all()
+    .map(shapeSimOfferRow);
+}
 
 // ---------------------------------------------------------------------------
 // Attachments
@@ -309,6 +392,9 @@ module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
   isValidRequirement,
+  SIM_OFFER_TYPE,
+  SIM_OFFER_TYPE_VALUES,
+  isValidSimOfferType,
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
@@ -357,6 +443,8 @@ module.exports = {
   createPlan,
   createBundle,
   createAccessory,
+  createSimOffer,
+  getSimOffers,
   getDevices,
   getPlans,
   getBundles,
