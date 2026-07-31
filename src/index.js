@@ -63,6 +63,8 @@ const { resolveMarket } = require('./market.js');
 const { formatPrice, formatMarketPrice } = require('./currency.js');
 const { generateOrderReference } = require('./order-reference.js');
 const { verify } = require('./verification-adapter.js');
+const { validateBody } = require('./validate-body.js');
+const { createApp } = require('./server.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -374,4 +376,6 @@ module.exports = {
   getOrderByReference,
   verify,
   seed,
+  validateBody,
+  createApp,
 };
