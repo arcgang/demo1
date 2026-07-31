@@ -122,13 +122,16 @@ const MIGRATIONS = [
     name: 'create_carts',
     up(db) {
       // Carts: an in-progress telecom configuration a shopper is building,
-      // anchored to a device with an optional plan. `updated_at` tracks the
-      // last time the cart was touched so stale carts can be reasoned about.
+      // anchored to a device with an optional plan. `created_at` records when
+      // the cart was first persisted and `updated_at` tracks the last time it
+      // was touched, so a transient failure does not lose the selection and
+      // stale carts can be reasoned about.
       db.exec(`
         CREATE TABLE carts (
           id         INTEGER PRIMARY KEY AUTOINCREMENT,
           device_id  INTEGER NOT NULL REFERENCES devices(id),
           plan_id    INTEGER          REFERENCES plans(id),
+          created_at TEXT    NOT NULL DEFAULT (datetime('now')),
           updated_at TEXT    NOT NULL DEFAULT (datetime('now'))
         );
       `);
@@ -197,6 +200,37 @@ const MIGRATIONS = [
 
       db.exec(`CREATE INDEX idx_orders_reference ON orders(reference);`);
       db.exec(`CREATE INDEX idx_order_items_order ON order_items(order_id);`);
+    },
+  },
+  {
+    version: 6,
+    name: 'create_cart_optional_selections',
+    up(db) {
+      // Cart optional selections: durable storage for the OPTIONAL attachment
+      // ids a shopper has selected on an in-progress cart, so a transient
+      // failure does not lose their device/plan/optional-add-on configuration.
+      //
+      // Constraints encoded in the schema:
+      //  - cart_id / attachment_id are foreign keys, so a selection can only
+      //    reference a real cart and a real attachment.
+      //  - (cart_id, attachment_id) is unique, so the same optional add-on can
+      //    be selected at most once per cart.
+      //  - rows are removed with their parent cart.
+      db.exec(`
+        CREATE TABLE cart_optional_selections (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          cart_id       INTEGER NOT NULL REFERENCES carts(id) ON DELETE CASCADE,
+          attachment_id INTEGER NOT NULL REFERENCES attachments(id),
+          UNIQUE (cart_id, attachment_id)
+        );
+      `);
+
+      db.exec(
+        `CREATE INDEX idx_cos_cart ON cart_optional_selections(cart_id);`,
+      );
+      db.exec(
+        `CREATE INDEX idx_cos_attachment ON cart_optional_selections(attachment_id);`,
+      );
     },
   },
 ];
