@@ -76,6 +76,36 @@ const MIGRATIONS = [
       db.exec(`CREATE INDEX idx_attachments_device_plan ON attachments(device_id, plan_id);`);
     },
   },
+  {
+    version: 3,
+    name: 'add_device_family_and_accessory_compatibility',
+    up(db) {
+      // Devices gain a `family` attribute grouping models that share
+      // accessories (e.g. all AURORA-family devices use the same charger).
+      db.exec(`ALTER TABLE devices ADD COLUMN family TEXT;`);
+
+      // Accessory compatibility: records that an accessory is compatible with a
+      // device family and/or a specific device. At least one of `family` /
+      // `device_id` must be present so a compatibility row always resolves to a
+      // real target.
+      db.exec(`
+        CREATE TABLE accessory_compatibility (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          accessory_id INTEGER NOT NULL REFERENCES accessories(id),
+          family       TEXT,
+          device_id    INTEGER          REFERENCES devices(id),
+          CHECK (family IS NOT NULL OR device_id IS NOT NULL)
+        );
+      `);
+
+      db.exec(
+        `CREATE INDEX idx_accessory_compatibility_family ON accessory_compatibility(family);`,
+      );
+      db.exec(
+        `CREATE INDEX idx_accessory_compatibility_device ON accessory_compatibility(device_id);`,
+      );
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {

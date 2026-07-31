@@ -50,7 +50,18 @@ function makeCreator(table) {
   };
 }
 
-const createDevice = makeCreator('devices');
+// Devices carry an optional `family` attribute (a group of models that share
+// accessories) in addition to name/price, so they get a dedicated creator.
+function createDevice(db, { name, price, family } = {}) {
+  assertName(name);
+  const finalPrice = normalizePrice(price);
+  const finalFamily = family === undefined ? null : family;
+  const info = db
+    .prepare('INSERT INTO devices (name, price, family) VALUES (?, ?, ?)')
+    .run(name, finalPrice, finalFamily);
+  return { id: Number(info.lastInsertRowid), name, price: finalPrice, family: finalFamily };
+}
+
 const createPlan = makeCreator('plans');
 const createBundle = makeCreator('bundles');
 const createAccessory = makeCreator('accessories');
@@ -65,7 +76,11 @@ function makeLister(table) {
   };
 }
 
-const getDevices = makeLister('devices');
+// Devices expose their `family` attribute alongside name/price.
+function getDevices(db) {
+  return db.prepare('SELECT id, name, price, family FROM devices ORDER BY id').all();
+}
+
 const getPlans = makeLister('plans');
 const getBundles = makeLister('bundles');
 const getAccessories = makeLister('accessories');
@@ -186,6 +201,85 @@ function getAttachmentsForDevicePlan(db, deviceId, planId, { requirement } = {})
   return db.prepare(sql).all(...params).map(shapeAttachmentRow);
 }
 
+// ---------------------------------------------------------------------------
+// Accessory compatibility
+// ---------------------------------------------------------------------------
+
+// Record that an accessory is compatible with a device family and/or a specific
+// device. At least one of `family` / `deviceId` must be provided so the mapping
+// resolves to a real target (mirrors the schema CHECK).
+function recordAccessoryCompatibility(db, { accessoryId, family, deviceId } = {}) {
+  if (accessoryId === undefined || accessoryId === null) {
+    throw new Error('accessoryId is required');
+  }
+  const finalFamily = family ?? null;
+  const finalDeviceId = deviceId ?? null;
+  if (finalFamily === null && finalDeviceId === null) {
+    throw new Error('compatibility must reference a device family or a specific device');
+  }
+
+  const info = db
+    .prepare(
+      `INSERT INTO accessory_compatibility (accessory_id, family, device_id)
+       VALUES (?, ?, ?)`,
+    )
+    .run(accessoryId, finalFamily, finalDeviceId);
+
+  return {
+    id: Number(info.lastInsertRowid),
+    accessoryId,
+    family: finalFamily,
+    deviceId: finalDeviceId,
+  };
+}
+
+// Shape a compatibility row joined against its accessory into the object the
+// application layer consumes, carrying the family compatibility cue.
+function shapeCompatibleAccessoryRow(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    price: row.price,
+    family: row.family,
+  };
+}
+
+// Query the accessories compatible with a device family. Each result carries
+// the accessory catalog fields plus the `family` compatibility cue.
+function getCompatibleAccessoriesForFamily(db, family) {
+  const rows = db
+    .prepare(
+      `SELECT ac.id, ac.name, ac.price, c.family AS family
+       FROM accessory_compatibility c
+       JOIN accessories ac ON ac.id = c.accessory_id
+       WHERE c.family = ?
+       ORDER BY ac.id`,
+    )
+    .all(family);
+  return rows.map(shapeCompatibleAccessoryRow);
+}
+
+// Query the accessories compatible with a device. An accessory is compatible if
+// it is mapped to the device's family or bound directly to the device itself.
+function getCompatibleAccessories(db, deviceId) {
+  const device = db
+    .prepare('SELECT id, family FROM devices WHERE id = ?')
+    .get(deviceId);
+  if (device === undefined) return [];
+
+  const rows = db
+    .prepare(
+      `SELECT ac.id, ac.name, ac.price, c.family AS family
+       FROM accessory_compatibility c
+       JOIN accessories ac ON ac.id = c.accessory_id
+       WHERE c.device_id = ?
+          OR (c.family IS NOT NULL AND c.family = ?)
+       ORDER BY ac.id`,
+    )
+    .all(deviceId, device.family);
+  return rows.map(shapeCompatibleAccessoryRow);
+}
+
 module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
@@ -202,6 +296,9 @@ module.exports = {
   attach,
   getAttachmentsForDevice,
   getAttachmentsForDevicePlan,
+  recordAccessoryCompatibility,
+  getCompatibleAccessories,
+  getCompatibleAccessoriesForFamily,
   recommend,
   recalculateCart,
   seed,
