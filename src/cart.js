@@ -1,6 +1,12 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { AppError } = require('./app-error.js');
+const { REASON_CODE, STATE_PRESERVATION } = require('./reason-codes.js');
+
+// Cart recalculation touches no persisted state, so a failure never throws away
+// the in-progress cart: it is always reported PRESERVED.
+const CART_PRESERVED = { cart: STATE_PRESERVATION.PRESERVED };
 
 // Turn a shaped attachment row into a cart line item. A line carries both the
 // attachment id (what the caller selects add-ons by) and the underlying add-on
@@ -41,14 +47,20 @@ function sumPrices(lines) {
 // circular dependency with `index.js` (which re-exports `recalculateCart`).
 function recalculateCart(db, { deviceId, planId, selectedOptionalAttachmentIds = [] } = {}) {
   if (deviceId === undefined || deviceId === null) {
-    throw new Error('deviceId is required to price a cart');
+    throw new AppError(REASON_CODE.MISSING_OR_INVALID_DEVICE_ID, {
+      userMessage: 'deviceId is required to price a cart',
+      statePreservation: CART_PRESERVED,
+    });
   }
 
   const model = require('./index.js');
 
   const device = db.prepare('SELECT id, name, price FROM devices WHERE id = ?').get(deviceId);
   if (!device) {
-    throw new Error(`no device found for id ${deviceId}`);
+    throw new AppError(REASON_CODE.UNKNOWN_DEVICE, {
+      userMessage: `no device found for id ${deviceId}`,
+      statePreservation: CART_PRESERVED,
+    });
   }
 
   let plan = null;

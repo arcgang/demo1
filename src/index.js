@@ -43,6 +43,8 @@ const {
   JOURNEY_VALUES,
   isValidJourney,
 } = require('./audit.js');
+const { AppError } = require('./app-error.js');
+const { REASON_CODE } = require('./reason-codes.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -71,14 +73,18 @@ function createDatabase(location = ':memory:') {
 
 function assertName(name) {
   if (typeof name !== 'string' || name.trim() === '') {
-    throw new Error('name is required');
+    // The catalog has no dedicated code for name validation, so fall back to
+    // UNEXPECTED while keeping the human-readable detail on the message.
+    throw new AppError(REASON_CODE.UNEXPECTED, { userMessage: 'name is required' });
   }
 }
 
 function normalizePrice(price) {
   const value = price === undefined || price === null ? 0 : price;
   if (typeof value !== 'number' || Number.isNaN(value) || value < 0) {
-    throw new Error('price must be a non-negative number');
+    throw new AppError(REASON_CODE.UNEXPECTED, {
+      userMessage: 'price must be a non-negative number',
+    });
   }
   return value;
 }
@@ -126,21 +132,28 @@ const getAccessories = makeLister('accessories');
 // constraint failure.
 function attach(db, { deviceId, planId, bundleId, accessoryId, requirement } = {}) {
   if (requirement === undefined || requirement === null) {
-    throw new Error('requirement is mandatory (must be REQUIRED or OPTIONAL)');
+    throw new AppError(REASON_CODE.MISSING_OR_INVALID_REQUIREMENT, {
+      userMessage: 'requirement is mandatory (must be REQUIRED or OPTIONAL)',
+    });
   }
   if (!isValidRequirement(requirement)) {
-    throw new Error(
-      `requirement must be one of ${REQUIREMENT_VALUES.join(', ')}; received "${requirement}"`,
-    );
+    throw new AppError(REASON_CODE.MISSING_OR_INVALID_REQUIREMENT, {
+      userMessage: `requirement must be one of ${REQUIREMENT_VALUES.join(', ')}; received "${requirement}"`,
+    });
   }
   if (deviceId === undefined || deviceId === null) {
-    throw new Error('deviceId is required');
+    throw new AppError(REASON_CODE.MISSING_OR_INVALID_DEVICE_ID, {
+      userMessage: 'deviceId is required',
+    });
   }
   if (
     (bundleId === undefined || bundleId === null) &&
     (accessoryId === undefined || accessoryId === null)
   ) {
-    throw new Error('an attachment must reference at least one add-on (a bundle or an accessory)');
+    throw new AppError(REASON_CODE.NO_ADDON_REFERENCED, {
+      userMessage:
+        'an attachment must reference at least one add-on (a bundle or an accessory)',
+    });
   }
 
   const info = db
@@ -199,7 +212,9 @@ const ATTACHMENT_SELECT = `
 // single requirement level.
 function getAttachmentsForDevice(db, deviceId, { requirement } = {}) {
   if (requirement !== undefined && !isValidRequirement(requirement)) {
-    throw new Error(`requirement filter must be one of ${REQUIREMENT_VALUES.join(', ')}`);
+    throw new AppError(REASON_CODE.INVALID_REQUIREMENT_FILTER, {
+      userMessage: `requirement filter must be one of ${REQUIREMENT_VALUES.join(', ')}`,
+    });
   }
 
   let sql = `${ATTACHMENT_SELECT} WHERE a.device_id = ?`;
@@ -216,7 +231,9 @@ function getAttachmentsForDevice(db, deviceId, { requirement } = {}) {
 // Query the attachments scoped to a specific device/plan pairing.
 function getAttachmentsForDevicePlan(db, deviceId, planId, { requirement } = {}) {
   if (requirement !== undefined && !isValidRequirement(requirement)) {
-    throw new Error(`requirement filter must be one of ${REQUIREMENT_VALUES.join(', ')}`);
+    throw new AppError(REASON_CODE.INVALID_REQUIREMENT_FILTER, {
+      userMessage: `requirement filter must be one of ${REQUIREMENT_VALUES.join(', ')}`,
+    });
   }
 
   let sql = `${ATTACHMENT_SELECT} WHERE a.device_id = ? AND a.plan_id IS ?`;

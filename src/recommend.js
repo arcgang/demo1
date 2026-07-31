@@ -1,6 +1,8 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { AppError } = require('./app-error.js');
+const { REASON_CODE } = require('./reason-codes.js');
 
 // Rank REQUIRED add-ons ahead of OPTIONAL ones. Anything unrecognised sorts
 // last so a stray value never jumps ahead of a genuine REQUIRED item.
@@ -24,10 +26,14 @@ function requirementRank(requirement) {
 // to avoid a circular require (index.js re-exports `recommend`).
 function recommend(db, { deviceId, customer } = {}) {
   if (deviceId === undefined || deviceId === null) {
-    throw new Error('deviceId is required to build recommendations');
+    throw new AppError(REASON_CODE.MISSING_OR_INVALID_DEVICE_ID, {
+      userMessage: 'deviceId is required to build recommendations',
+    });
   }
   if (customer === undefined || customer === null) {
-    throw new Error('a customer context is required to build recommendations');
+    throw new AppError(REASON_CODE.MISSING_CUSTOMER_CONTEXT, {
+      userMessage: 'a customer context is required to build recommendations',
+    });
   }
 
   const model = require('./index.js');
