@@ -242,6 +242,69 @@ function getAttachmentsForDevicePlan(db, deviceId, planId, { requirement } = {})
   return db.prepare(sql).all(...params).map(shapeAttachmentRow);
 }
 
+// ---------------------------------------------------------------------------
+// Orders
+// ---------------------------------------------------------------------------
+
+// Shape a raw order row into the object the application layer consumes,
+// mirroring the makeCreator/shapeRow conventions used for the catalog above.
+function shapeOrderRow(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    reference: row.reference,
+    status: row.status,
+    deviceId: row.device_id,
+    planId: row.plan_id,
+    total: row.total,
+  };
+}
+
+const ORDER_SELECT =
+  'SELECT id, reference, status, device_id, plan_id, total FROM orders';
+
+// Persist a confirmed cart as an order row and return the shaped order. A
+// unique `order_reference` is generated (from the next order sequence and the
+// current time) when `orderReference` is not supplied; `deviceId` is required
+// and `total` is validated like a catalog price (defaults to 0, must be a
+// non-negative number). A freshly created order begins PENDING.
+function createOrder(db, { deviceId, planId, total, orderReference } = {}) {
+  if (deviceId === undefined || deviceId === null) {
+    throw new Error('deviceId is required');
+  }
+  const finalTotal = normalizePrice(total);
+
+  let reference = orderReference;
+  if (reference === undefined || reference === null) {
+    const { count } = db.prepare('SELECT COUNT(*) AS count FROM orders').get();
+    reference = generateOrderReference({ sequence: count, timestamp: Date.now() });
+  }
+
+  const status = ORDER_STATUS.PENDING;
+  const info = db
+    .prepare(
+      `INSERT INTO orders (reference, status, device_id, plan_id, total)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(reference, status, deviceId, planId ?? null, finalTotal);
+
+  return {
+    id: Number(info.lastInsertRowid),
+    reference,
+    status,
+    deviceId,
+    planId: planId ?? null,
+    total: finalTotal,
+  };
+}
+
+// Look up a persisted order by its unique reference, returning the shaped order
+// or undefined when no order carries that reference.
+function getOrderByReference(db, orderReference) {
+  const row = db.prepare(`${ORDER_SELECT} WHERE reference = ?`).get(orderReference);
+  return shapeOrderRow(row);
+}
+
 module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
@@ -307,6 +370,8 @@ module.exports = {
   formatPrice,
   formatMarketPrice,
   generateOrderReference,
+  createOrder,
+  getOrderByReference,
   verify,
   seed,
 };
