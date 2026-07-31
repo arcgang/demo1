@@ -2,6 +2,20 @@
 
 const { REQUIREMENT } = require('./requirement.js');
 
+// Order lifecycle vocabulary, following the same enum-backed CHECK pattern as
+// the requirement vocabulary. A confirmed cart becomes an order that begins
+// PENDING (awaiting payment), advances to PAID and then IN_FULFILLMENT, and
+// ends in a terminal COMPLETED or FAILED state.
+const ORDER_STATUS = Object.freeze({
+  PENDING: 'PENDING',
+  PAID: 'PAID',
+  IN_FULFILLMENT: 'IN_FULFILLMENT',
+  COMPLETED: 'COMPLETED',
+  FAILED: 'FAILED',
+});
+
+const ORDER_STATUS_VALUES = Object.freeze(Object.values(ORDER_STATUS));
+
 // Ordered list of migrations. Each migration has a monotonically increasing
 // `version` and an `up(db)` that applies its schema change. `runMigrations`
 // tracks the applied versions in a `schema_migrations` bookkeeping table so it
@@ -137,6 +151,54 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 5,
+    name: 'create_orders',
+    up(db) {
+      // Orders: a confirmed cart persisted as an order, anchored to a device
+      // with an optional plan. Each order carries a unique, human-readable
+      // `reference` (e.g. ORD-0001) so it can be looked up and shared.
+      //
+      // Constraints encoded in the schema:
+      //  - reference is unique so an order is addressable by its reference.
+      //  - status must be one of the known lifecycle values (mirroring the
+      //    requirement.js enum pattern via a CHECK constraint).
+      //  - total is a non-negative REAL amount payable for the order.
+      db.exec(`
+        CREATE TABLE orders (
+          id         INTEGER PRIMARY KEY AUTOINCREMENT,
+          reference  TEXT    NOT NULL UNIQUE,
+          status     TEXT    NOT NULL CHECK (status IN (${ORDER_STATUS_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')})),
+          device_id  INTEGER NOT NULL REFERENCES devices(id),
+          plan_id    INTEGER          REFERENCES plans(id),
+          total      REAL    NOT NULL DEFAULT 0 CHECK (total >= 0),
+          created_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      // Order items: the itemized breakdown of a confirmed order. Each row
+      // captures the add-on `kind` (bundle/accessory), the `source_id` pointing
+      // back at the originating catalog row, the display `name`, the `price` at
+      // the time of confirmation, and whether it was REQUIRED or OPTIONAL for
+      // the pairing. Rows are removed with their parent order.
+      db.exec(`
+        CREATE TABLE order_items (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    INTEGER NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          kind        TEXT    NOT NULL,
+          source_id   INTEGER,
+          name        TEXT    NOT NULL,
+          price       REAL    NOT NULL DEFAULT 0 CHECK (price >= 0),
+          requirement TEXT    NOT NULL CHECK (requirement IN ('${REQUIREMENT.REQUIRED}', '${REQUIREMENT.OPTIONAL}'))
+        );
+      `);
+
+      db.exec(`CREATE INDEX idx_orders_reference ON orders(reference);`);
+      db.exec(`CREATE INDEX idx_order_items_order ON order_items(order_id);`);
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
@@ -170,4 +232,4 @@ function runMigrations(db) {
   }
 }
 
-module.exports = { MIGRATIONS, runMigrations };
+module.exports = { MIGRATIONS, runMigrations, ORDER_STATUS, ORDER_STATUS_VALUES };
