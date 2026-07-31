@@ -53,6 +53,14 @@ const {
   getReasonMeta,
   isValidReasonCode,
 } = require('./reason-codes.js');
+const {
+  SIM_TYPE,
+  SIM_TYPE_VALUES,
+  isValidSimType,
+  ACTIVATION_TYPE,
+  ACTIVATION_TYPE_VALUES,
+  isValidActivationType,
+} = require('./sim-offer.js');
 const { AppError, fromReasonCode } = require('./app-error.js');
 const { toUserFacingError } = require('./user-facing-error.js');
 const { runMigrations } = require('./migrations.js');
@@ -305,6 +313,75 @@ function getOrderByReference(db, orderReference) {
   return shapeOrderRow(row);
 }
 
+// ---------------------------------------------------------------------------
+// SIM/eSIM offers
+// ---------------------------------------------------------------------------
+
+// Shape a raw sim_offers row into the object the application layer consumes,
+// mirroring the makeCreator/shapeRow conventions used for the catalog above.
+// The stored 0/1 `requires_verification` column is surfaced as a boolean flag.
+function shapeSimOfferRow(row) {
+  if (!row) return row;
+  return {
+    id: row.id,
+    type: row.type,
+    name: row.name,
+    price: row.price,
+    requiresVerification: row.requires_verification === 1,
+    activationType: row.activation_type,
+  };
+}
+
+const SIM_OFFER_SELECT =
+  'SELECT id, type, name, price, requires_verification, activation_type FROM sim_offers';
+
+// Persist a SIM/eSIM offer and return the shaped record, mirroring the
+// makeCreator conventions. `type` and `activationType` are validated against
+// their enums (in addition to the schema CHECKs) so callers get a clear, early
+// error; `name` is required and `price` is validated like a catalog price
+// (defaults to 0, must be a non-negative number). The onboarding fields
+// (requiresVerification, activationType) are persisted alongside the offer.
+function createSimOffer(
+  db,
+  { type, name, price, requiresVerification, activationType } = {},
+) {
+  if (!isValidSimType(type)) {
+    throw new Error(
+      `type must be one of ${SIM_TYPE_VALUES.join(', ')}; received "${type}"`,
+    );
+  }
+  if (!isValidActivationType(activationType)) {
+    throw new Error(
+      `activationType must be one of ${ACTIVATION_TYPE_VALUES.join(', ')}; received "${activationType}"`,
+    );
+  }
+  assertName(name);
+  const finalPrice = normalizePrice(price);
+  const requiresVerificationFlag = requiresVerification ? 1 : 0;
+
+  const info = db
+    .prepare(
+      `INSERT INTO sim_offers (type, name, price, requires_verification, activation_type)
+       VALUES (?, ?, ?, ?, ?)`,
+    )
+    .run(type, name, finalPrice, requiresVerificationFlag, activationType);
+
+  return {
+    id: Number(info.lastInsertRowid),
+    type,
+    name,
+    price: finalPrice,
+    requiresVerification: requiresVerificationFlag === 1,
+    activationType,
+  };
+}
+
+// List the persisted SIM/eSIM offers (ordered by id) as shaped records,
+// mirroring the makeLister conventions used for the catalog above.
+function getSimOffers(db) {
+  return db.prepare(`${SIM_OFFER_SELECT} ORDER BY id`).all().map(shapeSimOfferRow);
+}
+
 module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
@@ -372,6 +449,14 @@ module.exports = {
   generateOrderReference,
   createOrder,
   getOrderByReference,
+  SIM_TYPE,
+  SIM_TYPE_VALUES,
+  isValidSimType,
+  ACTIVATION_TYPE,
+  ACTIVATION_TYPE_VALUES,
+  isValidActivationType,
+  createSimOffer,
+  getSimOffers,
   verify,
   seed,
 };
