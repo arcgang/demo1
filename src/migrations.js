@@ -1,6 +1,10 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const {
+  SIM_TYPE_VALUES,
+  ACTIVATION_TYPE_VALUES,
+} = require('./sim-offer.js');
 
 // Order lifecycle vocabulary, following the same enum-backed CHECK pattern as
 // the requirement vocabulary. A confirmed cart becomes an order that begins
@@ -231,6 +235,37 @@ const MIGRATIONS = [
       db.exec(
         `CREATE INDEX idx_cos_attachment ON cart_optional_selections(attachment_id);`,
       );
+    },
+  },
+  {
+    version: 7,
+    name: 'create_sim_offers',
+    up(db) {
+      // SIM offers: the SIM vs eSIM offer data model together with its
+      // onboarding implications. Each offer records whether identity
+      // verification is required before use (`requires_verification`) and when
+      // the SIM/eSIM activates (`activation_type`).
+      //
+      // Constraints encoded in the schema:
+      //  - type must be one of the known SIM/ESIM values (enum-CHECK pattern,
+      //    mirroring requirement/order-status).
+      //  - price is a non-negative REAL amount (mirroring the catalog tables).
+      //  - requires_verification is a 0/1 flag (mirroring markets.tax_inclusive).
+      //  - activation_type must be one of the known activation values.
+      db.exec(`
+        CREATE TABLE sim_offers (
+          id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+          type                  TEXT    NOT NULL CHECK (type IN (${SIM_TYPE_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')})),
+          name                  TEXT    NOT NULL,
+          price                 REAL    NOT NULL DEFAULT 0 CHECK (price >= 0),
+          requires_verification INTEGER NOT NULL DEFAULT 0 CHECK (requires_verification IN (0, 1)),
+          activation_type       TEXT    NOT NULL CHECK (activation_type IN (${ACTIVATION_TYPE_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')}))
+        );
+      `);
     },
   },
 ];
