@@ -1,6 +1,7 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { MILESTONE_VALUES, STATUS_STATE_VALUES } = require('./status.js');
 
 // Order lifecycle vocabulary, following the same enum-backed CHECK pattern as
 // the requirement vocabulary. A confirmed cart becomes an order that begins
@@ -197,6 +198,43 @@ const MIGRATIONS = [
 
       db.exec(`CREATE INDEX idx_orders_reference ON orders(reference);`);
       db.exec(`CREATE INDEX idx_order_items_order ON order_items(order_id);`);
+    },
+  },
+  {
+    version: 6,
+    name: 'create_order_status_events',
+    up(db) {
+      // Order status events: an append-only log of each milestone transition an
+      // order goes through. Every row records which milestone (PAYMENT /
+      // VERIFICATION / FULFILMENT / ACTIVATION) moved into which state (PENDING /
+      // IN_PROGRESS / COMPLETE / BLOCKED / FAILED), an optional free-text detail,
+      // and when it occurred. This is the source-of-truth the status timeline
+      // aggregates from.
+      //
+      // Constraints encoded in the schema:
+      //  - milestone must be one of the MILESTONE values from src/status.js.
+      //  - state must be one of the STATUS_STATE values from src/status.js.
+      //    Both CHECK lists are interpolated from the shared vocabulary exactly
+      //    as migration 2 does with REQUIREMENT.
+      //  - occurred_at defaults to the current timestamp.
+      db.exec(`
+        CREATE TABLE order_status_events (
+          id          INTEGER PRIMARY KEY AUTOINCREMENT,
+          order_id    INTEGER NOT NULL REFERENCES orders(id),
+          milestone   TEXT    NOT NULL CHECK (milestone IN (${MILESTONE_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')})),
+          state       TEXT    NOT NULL CHECK (state IN (${STATUS_STATE_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')})),
+          detail      TEXT,
+          occurred_at TEXT    NOT NULL DEFAULT (datetime('now'))
+        );
+      `);
+
+      db.exec(
+        `CREATE INDEX idx_order_status_events_order ON order_status_events(order_id);`,
+      );
     },
   },
 ];

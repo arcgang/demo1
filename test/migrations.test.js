@@ -520,3 +520,234 @@ function firstOrderStatus(db) {
   const allowed = checkAllowedValues(tableSql(db, 'orders'), 'status');
   return allowed.length > 0 ? allowed[0] : 'PENDING';
 }
+
+// ---------------------------------------------------------------------------
+// Order status-event migration: `order_status_events`.
+//
+// Records each milestone transition of an order as an append-only event row:
+// which milestone (PAYMENT / VERIFICATION / FULFILMENT / ACTIVATION) moved into
+// which state (PENDING / IN_PROGRESS / COMPLETE / BLOCKED / FAILED), an optional
+// free-text detail, and when it occurred. Both the milestone and state columns
+// are CHECK-constrained to the vocabularies exported by `src/status.js`, exactly
+// as the requirement/order-status migrations interpolate their enum lists.
+//
+// The `orders` table already exists (migration 5) with a unique, indexed public
+// reference, so this migration only introduces the events table plus its index.
+// These tests are written BEFORE implementation and must fail until the
+// migration exists.
+//
+// NOTE: the repository already contains migrations 1-5, so the status-event
+// migration is the next version in the gap-free sequence (6).
+// ---------------------------------------------------------------------------
+
+const { MILESTONE_VALUES, STATUS_STATE_VALUES } = require('../src/status.js');
+
+// Insert a minimal valid order and return its integer id, so status-event rows
+// have a real parent to reference.
+function insertOrder(db, reference = 'ORD-STATUS-1') {
+  const device = model.createDevice(db, { name: 'iPhone 15', price: 18999 });
+  const info = db
+    .prepare('INSERT INTO orders (reference, status, device_id, total) VALUES (?, ?, ?, ?)')
+    .run(reference, firstOrderStatus(db), device.id, 18999);
+  return Number(info.lastInsertRowid);
+}
+
+test('a status-event migration (version 6) exists and follows the established pattern', () => {
+  const versions = MIGRATIONS.map((m) => m.version);
+  assert.ok(versions.includes(6), 'expected a migration with version 6 for order status events');
+
+  // Versions must remain a monotonically increasing, gap-free sequence
+  // starting at 1.
+  const sorted = [...versions].sort((a, b) => a - b);
+  const expected = Array.from({ length: sorted.length }, (_, i) => i + 1);
+  assert.deepEqual(sorted, expected, 'migration versions should be gap-free starting at 1');
+
+  const migration = MIGRATIONS.find((m) => m.version === 6);
+  assert.ok(migration, 'expected to find the version 6 migration');
+  assert.equal(typeof migration.name, 'string', 'migration 6 should have a name');
+  assert.ok(migration.name.length > 0, 'migration 6 name should be non-empty');
+  assert.equal(typeof migration.up, 'function', 'migration 6 should expose an up(db) function');
+});
+
+test('migration version 6 is recorded in schema_migrations after createDatabase', () => {
+  const db = model.createDatabase(':memory:');
+  const versions = db
+    .prepare('SELECT version FROM schema_migrations ORDER BY version')
+    .all()
+    .map((r) => r.version);
+  assert.ok(versions.includes(6), 'version 6 should be recorded in schema_migrations');
+});
+
+test('the order_status_events table exists and is empty on a fresh database', () => {
+  const db = model.createDatabase(':memory:');
+  assert.ok(tableExists(db, 'order_status_events'), 'order_status_events table should exist');
+  assert.deepEqual(
+    db.prepare('SELECT * FROM order_status_events').all(),
+    [],
+    'order_status_events should be empty on a fresh db',
+  );
+});
+
+test('the order_status_events table has the expected columns', () => {
+  const db = model.createDatabase(':memory:');
+  const cols = columnInfo(db, 'order_status_events');
+
+  for (const name of ['id', 'order_id', 'milestone', 'state', 'detail', 'occurred_at']) {
+    assert.ok(cols[name], `order_status_events should have a "${name}" column`);
+  }
+});
+
+test('order_status_events.order_id references orders and is indexed', () => {
+  const db = model.createDatabase(':memory:');
+  const fks = foreignKeys(db, 'order_status_events');
+
+  const orderFk = fks.find((fk) => fk.from === 'order_id');
+  assert.ok(orderFk, 'order_status_events.order_id should be a foreign key');
+  assert.equal(orderFk.table, 'orders', 'order_status_events.order_id should reference orders');
+  assert.equal(orderFk.to, 'id', 'order_status_events.order_id should reference orders(id)');
+
+  assert.ok(
+    hasIndexOn(db, 'order_status_events', 'order_id'),
+    'order_status_events.order_id should be indexed',
+  );
+});
+
+test('the orders public reference remains indexed after the status-event migration', () => {
+  const db = model.createDatabase(':memory:');
+  // The public order reference is unique and indexed for direct lookup/sharing.
+  assert.ok(hasIndexOn(db, 'orders', 'reference'), 'orders reference column should be indexed');
+});
+
+test('order_status_events.milestone is constrained by the MILESTONE vocabulary', () => {
+  const db = model.createDatabase(':memory:');
+  const sql = tableSql(db, 'order_status_events');
+
+  // The CHECK must enumerate exactly the MILESTONE values from src/status.js.
+  const allowed = checkAllowedValues(sql, 'milestone');
+  assert.deepEqual(
+    [...allowed].sort(),
+    [...MILESTONE_VALUES].sort(),
+    'order_status_events.milestone CHECK should mirror the MILESTONE vocabulary',
+  );
+
+  const orderId = insertOrder(db, 'ORD-MILESTONE');
+
+  // An enumerated milestone is accepted (paired with a valid state).
+  assert.doesNotThrow(() =>
+    db
+      .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+      .run(orderId, MILESTONE_VALUES[0], STATUS_STATE_VALUES[0]),
+  );
+
+  // A value outside the enumeration is rejected.
+  assert.throws(
+    () =>
+      db
+        .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+        .run(orderId, 'NOT_A_MILESTONE', STATUS_STATE_VALUES[0]),
+    /CHECK|constraint/i,
+    'an unknown milestone should violate the CHECK constraint',
+  );
+});
+
+test('order_status_events.state is constrained by the STATUS_STATE vocabulary', () => {
+  const db = model.createDatabase(':memory:');
+  const sql = tableSql(db, 'order_status_events');
+
+  const allowed = checkAllowedValues(sql, 'state');
+  assert.deepEqual(
+    [...allowed].sort(),
+    [...STATUS_STATE_VALUES].sort(),
+    'order_status_events.state CHECK should mirror the STATUS_STATE vocabulary',
+  );
+
+  const orderId = insertOrder(db, 'ORD-STATE');
+
+  // An enumerated state is accepted (paired with a valid milestone).
+  assert.doesNotThrow(() =>
+    db
+      .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+      .run(orderId, MILESTONE_VALUES[0], STATUS_STATE_VALUES[0]),
+  );
+
+  // A value outside the enumeration is rejected.
+  assert.throws(
+    () =>
+      db
+        .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+        .run(orderId, MILESTONE_VALUES[0], 'NOT_A_REAL_STATE'),
+    /CHECK|constraint/i,
+    'an unknown state should violate the CHECK constraint',
+  );
+});
+
+test('order_status_events.occurred_at defaults to the current timestamp', () => {
+  const db = model.createDatabase(':memory:');
+  const orderId = insertOrder(db, 'ORD-OCCURRED');
+
+  const info = db
+    .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+    .run(orderId, MILESTONE_VALUES[0], STATUS_STATE_VALUES[0]);
+
+  const row = db
+    .prepare('SELECT * FROM order_status_events WHERE id = ?')
+    .get(Number(info.lastInsertRowid));
+
+  assert.equal(typeof row.occurred_at, 'string', 'occurred_at should default to a timestamp string');
+  assert.ok(row.occurred_at.length > 0, 'occurred_at default should be non-empty');
+});
+
+test('order_status_events foreign key is enforced (no orphan events)', () => {
+  const db = model.createDatabase(':memory:');
+  assert.throws(
+    () =>
+      db
+        .prepare('INSERT INTO order_status_events (order_id, milestone, state) VALUES (?, ?, ?)')
+        .run(9999, MILESTONE_VALUES[0], STATUS_STATE_VALUES[0]),
+    /FOREIGN KEY|constraint/i,
+    'inserting an event for a non-existent order should violate the foreign key',
+  );
+});
+
+test('a milestone transition event persists end-to-end against a real order', () => {
+  const db = model.createDatabase(':memory:');
+  const orderId = insertOrder(db, 'ORD-3001');
+
+  db.prepare(
+    'INSERT INTO order_status_events (order_id, milestone, state, detail) VALUES (?, ?, ?, ?)',
+  ).run(orderId, MILESTONE_VALUES[0], STATUS_STATE_VALUES[0], 'Payment confirmed.');
+
+  const events = db
+    .prepare('SELECT * FROM order_status_events WHERE order_id = ?')
+    .all(orderId);
+
+  assert.equal(events.length, 1, 'the order should have its single status event persisted');
+  assert.equal(events[0].order_id, orderId);
+  assert.equal(events[0].milestone, MILESTONE_VALUES[0]);
+  assert.equal(events[0].state, STATUS_STATE_VALUES[0]);
+  assert.equal(events[0].detail, 'Payment confirmed.');
+});
+
+test('re-running migrations after the status-event table exists is idempotent', () => {
+  const db = model.createDatabase(':memory:');
+
+  const before = db
+    .prepare('SELECT version FROM schema_migrations ORDER BY version')
+    .all()
+    .map((r) => r.version);
+
+  assert.doesNotThrow(() => runMigrations(db), 're-running migrations should be safe');
+  assert.doesNotThrow(() => runMigrations(db), 're-running migrations should be safe');
+
+  const after = db
+    .prepare('SELECT version FROM schema_migrations ORDER BY version')
+    .all()
+    .map((r) => r.version);
+
+  assert.deepEqual(after, before, 'schema_migrations should be unchanged after re-running');
+  assert.ok(after.includes(6), 'version 6 should remain recorded after re-running');
+  assert.ok(
+    tableExists(db, 'order_status_events'),
+    'order_status_events table should still exist after re-running',
+  );
+});
