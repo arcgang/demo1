@@ -24,6 +24,7 @@ const { recalculateCart } = require('./cart.js');
 const { resolveMarket } = require('./market.js');
 const { formatPrice, formatMarketPrice } = require('./currency.js');
 const { generateOrderReference } = require('./order-reference.js');
+const { verify } = require('./verification-adapter.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -235,5 +236,6 @@ module.exports = {
   formatPrice,
   formatMarketPrice,
   generateOrderReference,
+  verify,
   seed,
 };
