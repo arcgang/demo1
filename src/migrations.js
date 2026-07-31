@@ -1,6 +1,7 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { DEVICE_FAMILY_VALUES } = require('./device-family.js');
 
 // Order lifecycle vocabulary, following the same enum-backed CHECK pattern as
 // the requirement vocabulary. A confirmed cart becomes an order that begins
@@ -230,6 +231,49 @@ const MIGRATIONS = [
       );
       db.exec(
         `CREATE INDEX idx_cos_attachment ON cart_optional_selections(attachment_id);`,
+      );
+    },
+  },
+  {
+    version: 7,
+    name: 'create_device_family_and_accessory_compatibility',
+    up(db) {
+      // Device family: the product family a device belongs to (e.g. a
+      // smartphone or a tablet), added as a nullable TEXT column so existing
+      // devices remain valid while new devices can be categorised. The value is
+      // constrained to the known device-family vocabulary via a CHECK, mirroring
+      // the requirement / order-status enum-backed CHECK convention.
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN family TEXT
+          CHECK (family IS NULL OR family IN (${DEVICE_FAMILY_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')}));
+      `);
+
+      // Accessory compatibility: records that an accessory is compatible with a
+      // device family. Each row references a real accessory and names one
+      // family.
+      //
+      // Constraints encoded in the schema:
+      //  - accessory_id is a foreign key, so a mapping can only reference a real
+      //    accessory (invalid accessory ids are rejected).
+      //  - family is constrained to the known device-family vocabulary via a
+      //    CHECK, following the enum-backed CHECK convention.
+      //  - (accessory_id, family) is unique, so the same family is recorded at
+      //    most once per accessory (mirroring cart_optional_selections).
+      db.exec(`
+        CREATE TABLE accessory_compatibility (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          accessory_id INTEGER NOT NULL REFERENCES accessories(id) ON DELETE CASCADE,
+          family       TEXT    NOT NULL CHECK (family IN (${DEVICE_FAMILY_VALUES.map(
+            (v) => `'${v}'`,
+          ).join(', ')})),
+          UNIQUE (accessory_id, family)
+        );
+      `);
+
+      db.exec(
+        `CREATE INDEX idx_ac_accessory ON accessory_compatibility(accessory_id);`,
       );
     },
   },
