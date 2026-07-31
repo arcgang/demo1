@@ -8,6 +8,7 @@ const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
 const { recalculateCart } = require('./cart.js');
 const { resolveMarket } = require('./market.js');
+const { formatPrice, formatMarketPrice } = require('./currency.js');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -206,5 +207,7 @@ module.exports = {
   recommend,
   recalculateCart,
   resolveMarket,
+  formatPrice,
+  formatMarketPrice,
   seed,
 };
