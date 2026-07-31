@@ -1,6 +1,7 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { AVAILABILITY } = require('./availability.js');
 
 // Ordered list of migrations. Each migration has a monotonically increasing
 // `version` and an `up(db)` that applies its schema change. `runMigrations`
@@ -74,6 +75,27 @@ const MIGRATIONS = [
 
       db.exec(`CREATE INDEX idx_attachments_device ON attachments(device_id);`);
       db.exec(`CREATE INDEX idx_attachments_device_plan ON attachments(device_id, plan_id);`);
+    },
+  },
+  {
+    version: 3,
+    name: 'add_device_availability_and_financing',
+    up(db) {
+      // Extend devices with merchandising signals:
+      //  - availability: stock status, constrained to the known vocabulary and
+      //    defaulting to IN_STOCK so pre-existing rows read as orderable.
+      //  - financing_eligible: an indicator (stored as 0/1) for whether the
+      //    device can be purchased on a financing plan; defaults to 0 (false).
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN availability TEXT NOT NULL
+          DEFAULT '${AVAILABILITY.IN_STOCK}'
+          CHECK (availability IN ('${AVAILABILITY.IN_STOCK}', '${AVAILABILITY.OUT_OF_STOCK}', '${AVAILABILITY.PREORDER}'));
+      `);
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN financing_eligible INTEGER NOT NULL
+          DEFAULT 0
+          CHECK (financing_eligible IN (0, 1));
+      `);
     },
   },
 ];

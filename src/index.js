@@ -3,6 +3,7 @@
 const { DatabaseSync } = require('node:sqlite');
 
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
+const { AVAILABILITY, AVAILABILITY_VALUES, isValidAvailability } = require('./availability.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -50,7 +51,41 @@ function makeCreator(table) {
   };
 }
 
-const createDevice = makeCreator('devices');
+function normalizeAvailability(availability) {
+  if (availability === undefined || availability === null) {
+    return AVAILABILITY.IN_STOCK;
+  }
+  if (!isValidAvailability(availability)) {
+    throw new Error(
+      `availability must be one of ${AVAILABILITY_VALUES.join(', ')}; received "${availability}"`,
+    );
+  }
+  return availability;
+}
+
+// Devices carry the shared name/price fields plus their own merchandising
+// signals (availability status and financing eligibility), so they get a
+// bespoke creator rather than the generic one.
+function createDevice(db, { name, price, availability, financingEligible } = {}) {
+  assertName(name);
+  const finalPrice = normalizePrice(price);
+  const finalAvailability = normalizeAvailability(availability);
+  const finalFinancingEligible = Boolean(financingEligible);
+  const info = db
+    .prepare(
+      `INSERT INTO devices (name, price, availability, financing_eligible)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(name, finalPrice, finalAvailability, finalFinancingEligible ? 1 : 0);
+  return {
+    id: Number(info.lastInsertRowid),
+    name,
+    price: finalPrice,
+    availability: finalAvailability,
+    financingEligible: finalFinancingEligible,
+  };
+}
+
 const createPlan = makeCreator('plans');
 const createBundle = makeCreator('bundles');
 const createAccessory = makeCreator('accessories');
@@ -65,7 +100,24 @@ function makeLister(table) {
   };
 }
 
-const getDevices = makeLister('devices');
+// Devices expose their availability status and financing indicator alongside
+// the shared fields; `financing_eligible` is stored as 0/1 and surfaced as a
+// JS boolean.
+function getDevices(db) {
+  return db
+    .prepare(
+      'SELECT id, name, price, availability, financing_eligible FROM devices ORDER BY id',
+    )
+    .all()
+    .map((row) => ({
+      id: row.id,
+      name: row.name,
+      price: row.price,
+      availability: row.availability,
+      financingEligible: Boolean(row.financing_eligible),
+    }));
+}
+
 const getPlans = makeLister('plans');
 const getBundles = makeLister('bundles');
 const getAccessories = makeLister('accessories');
@@ -190,6 +242,9 @@ module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
   isValidRequirement,
+  AVAILABILITY,
+  AVAILABILITY_VALUES,
+  isValidAvailability,
   createDatabase,
   createDevice,
   createPlan,
