@@ -233,6 +233,50 @@ const MIGRATIONS = [
       );
     },
   },
+  {
+    version: 7,
+    name: 'create_product_market_pricing',
+    up(db) {
+      // Product market pricing: scopes a catalog item to a market, capturing the
+      // market-currency price and whether it can be purchased there. A row's
+      // presence means the item is available in that market; combined with the
+      // `purchasable` flag and the market's currency, it satisfies the
+      // per-market availability, currency, and purchasability criteria.
+      //
+      // The task brief labels this "migration version 4", but this branch
+      // already ships migrations 1-6, so per-market pricing takes the next
+      // gap-free version (7) rather than colliding with an existing number.
+      //
+      // Constraints encoded in the schema:
+      //  - market_code references markets(code), matching the existing schema's
+      //    referential-integrity style so a price can only scope a real market.
+      //  - product_type is constrained to the four catalog kinds.
+      //  - product_id is the INTEGER id of the catalog row within its type.
+      //  - price is a non-negative REAL amount in the market's currency.
+      //  - purchasable is a 0/1 flag: 0 marks an unsupported or
+      //    payment-dependent offer that is still listed as available.
+      db.exec(`
+        CREATE TABLE product_market_pricing (
+          id           INTEGER PRIMARY KEY AUTOINCREMENT,
+          market_code  TEXT    NOT NULL REFERENCES markets(code),
+          product_type TEXT    NOT NULL CHECK (product_type IN ('device', 'plan', 'bundle', 'accessory')),
+          product_id   INTEGER NOT NULL,
+          price        REAL    NOT NULL DEFAULT 0 CHECK (price >= 0),
+          purchasable  INTEGER NOT NULL DEFAULT 1 CHECK (purchasable IN (0, 1))
+        );
+      `);
+
+      // A catalog item is scoped at most once per market, so re-scoping the same
+      // (market, type, product) is rejected.
+      db.exec(
+        `CREATE UNIQUE INDEX idx_pmp_scope ON product_market_pricing(market_code, product_type, product_id);`,
+      );
+      // Support market-scoped catalog queries.
+      db.exec(
+        `CREATE INDEX idx_pmp_market ON product_market_pricing(market_code);`,
+      );
+    },
+  },
 ];
 
 function ensureMigrationsTable(db) {
