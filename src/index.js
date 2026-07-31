@@ -32,6 +32,17 @@ const {
   PORTING_OUTCOME_VALUES,
   isValidPortingOutcome,
 } = require('./porting.js');
+const {
+  AUDIT_EVENT_TYPE,
+  AUDIT_EVENT_TYPE_VALUES,
+  isValidAuditEventType,
+  CONSENT_PURPOSE,
+  CONSENT_PURPOSE_VALUES,
+  isValidConsentPurpose,
+  JOURNEY,
+  JOURNEY_VALUES,
+  isValidJourney,
+} = require('./audit.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -246,6 +257,15 @@ module.exports = {
   PORTING_OUTCOME,
   PORTING_OUTCOME_VALUES,
   isValidPortingOutcome,
+  AUDIT_EVENT_TYPE,
+  AUDIT_EVENT_TYPE_VALUES,
+  isValidAuditEventType,
+  CONSENT_PURPOSE,
+  CONSENT_PURPOSE_VALUES,
+  isValidConsentPurpose,
+  JOURNEY,
+  JOURNEY_VALUES,
+  isValidJourney,
   createDatabase,
   createDevice,
   createPlan,
