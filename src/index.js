@@ -26,6 +26,15 @@ const {
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
 } = require('./order-status.js');
+const {
+  ACTIVATION_MILESTONE,
+  ACTIVATION_MILESTONE_VALUES,
+  ACTIVATION_MILESTONE_SEQUENCE,
+  MILESTONE_STATUS,
+  MILESTONE_STATUS_VALUES,
+  isValidMilestone,
+  isValidStatus,
+} = require('./milestone.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -235,6 +244,13 @@ module.exports = {
   ORDER_STATUS_VALUES,
   isValidOrderStatus,
   ORDER_NEXT_STEPS,
+  ACTIVATION_MILESTONE,
+  ACTIVATION_MILESTONE_VALUES,
+  ACTIVATION_MILESTONE_SEQUENCE,
+  MILESTONE_STATUS,
+  MILESTONE_STATUS_VALUES,
+  isValidMilestone,
+  isValidStatus,
   createDatabase,
   createDevice,
   createPlan,
