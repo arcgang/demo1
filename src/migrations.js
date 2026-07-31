@@ -1,6 +1,7 @@
 'use strict';
 
 const { REQUIREMENT } = require('./requirement.js');
+const { AVAILABILITY_VALUES, DEFAULT_AVAILABILITY } = require('./availability.js');
 
 // Order lifecycle vocabulary, following the same enum-backed CHECK pattern as
 // the requirement vocabulary. A confirmed cart becomes an order that begins
@@ -231,6 +232,34 @@ const MIGRATIONS = [
       db.exec(
         `CREATE INDEX idx_cos_attachment ON cart_optional_selections(attachment_id);`,
       );
+    },
+  },
+  {
+    version: 7,
+    name: 'add_device_availability_and_financing',
+    up(db) {
+      // Extend the devices catalog with merchandising attributes:
+      //  - availability: whether the device is IN_STOCK, OUT_OF_STOCK or
+      //    PREORDER. NOT NULL with a default of IN_STOCK so existing rows are
+      //    backfilled and inserts that omit it still succeed. Constrained to the
+      //    known vocabulary via a CHECK (mirroring the requirement/order-status
+      //    enum pattern).
+      //  - financing_eligible: a 0/1 flag for whether the device can be bought
+      //    on a financing plan. NOT NULL default 0, constrained to (0, 1).
+      //
+      // ALTER TABLE ... ADD COLUMN is used so the migration applies cleanly to
+      // an existing, already-populated devices table.
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN availability TEXT NOT NULL
+          DEFAULT '${DEFAULT_AVAILABILITY}'
+          CHECK (availability IN (${AVAILABILITY_VALUES.map((v) => `'${v}'`).join(', ')}));
+      `);
+
+      db.exec(`
+        ALTER TABLE devices ADD COLUMN financing_eligible INTEGER NOT NULL
+          DEFAULT 0
+          CHECK (financing_eligible IN (0, 1));
+      `);
     },
   },
 ];

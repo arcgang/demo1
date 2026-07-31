@@ -4,6 +4,12 @@ const { DatabaseSync } = require('node:sqlite');
 
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
 const {
+  AVAILABILITY,
+  AVAILABILITY_VALUES,
+  DEFAULT_AVAILABILITY,
+  isValidAvailability,
+} = require('./availability.js');
+const {
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
@@ -106,7 +112,60 @@ function makeCreator(table) {
   };
 }
 
-const createDevice = makeCreator('devices');
+// Normalize the device availability input, defaulting to IN_STOCK when omitted
+// and validating against the availability enum (mirroring the schema CHECK) so
+// callers get a clear error rather than a raw SQL constraint failure.
+function normalizeAvailability(availability) {
+  const value =
+    availability === undefined || availability === null
+      ? DEFAULT_AVAILABILITY
+      : availability;
+  if (!isValidAvailability(value)) {
+    throw new Error(
+      `availability must be one of ${AVAILABILITY_VALUES.join(', ')}; received "${availability}"`,
+    );
+  }
+  return value;
+}
+
+// Normalize the financing-eligibility input to a 0/1 flag, defaulting to 0 when
+// omitted and rejecting anything outside {0, 1} (mirroring the schema CHECK).
+function normalizeFinancingEligible(financingEligible) {
+  const value =
+    financingEligible === undefined || financingEligible === null
+      ? 0
+      : financingEligible;
+  if (value !== 0 && value !== 1) {
+    throw new Error(
+      `financingEligible must be 0 or 1; received "${financingEligible}"`,
+    );
+  }
+  return value;
+}
+
+// Devices carry two merchandising attributes beyond name/price (availability
+// and financing eligibility), so they get a dedicated creator rather than the
+// generic makeCreator used by the other catalog tables.
+function createDevice(db, { name, price, availability, financingEligible } = {}) {
+  assertName(name);
+  const finalPrice = normalizePrice(price);
+  const finalAvailability = normalizeAvailability(availability);
+  const finalFinancingEligible = normalizeFinancingEligible(financingEligible);
+  const info = db
+    .prepare(
+      `INSERT INTO devices (name, price, availability, financing_eligible)
+       VALUES (?, ?, ?, ?)`,
+    )
+    .run(name, finalPrice, finalAvailability, finalFinancingEligible);
+  return {
+    id: Number(info.lastInsertRowid),
+    name,
+    price: finalPrice,
+    availability: finalAvailability,
+    financingEligible: finalFinancingEligible,
+  };
+}
+
 const createPlan = makeCreator('plans');
 const createBundle = makeCreator('bundles');
 const createAccessory = makeCreator('accessories');
@@ -121,7 +180,18 @@ function makeLister(table) {
   };
 }
 
-const getDevices = makeLister('devices');
+// Devices carry the extra availability/financing_eligible columns, so their
+// SELECT lists those fields (raw column names, matching the persisted row) in
+// addition to id/name/price.
+function getDevices(db) {
+  return db
+    .prepare(
+      `SELECT id, name, price, availability, financing_eligible
+       FROM devices ORDER BY id`,
+    )
+    .all();
+}
+
 const getPlans = makeLister('plans');
 const getBundles = makeLister('bundles');
 const getAccessories = makeLister('accessories');
@@ -309,6 +379,10 @@ module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
   isValidRequirement,
+  AVAILABILITY,
+  AVAILABILITY_VALUES,
+  DEFAULT_AVAILABILITY,
+  isValidAvailability,
   MILESTONE,
   MILESTONE_VALUES,
   isValidMilestone,
