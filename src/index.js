@@ -11,6 +11,12 @@ const {
   ACTIVATION_STATUS_VALUES,
   isValidActivationStatus,
 } = require('./status.js');
+const {
+  ORDER_STATUS,
+  ORDER_STATUS_VALUES,
+  isValidOrderStatus,
+  ORDER_NEXT_STEPS,
+} = require('./order-status.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -207,6 +213,10 @@ module.exports = {
   ACTIVATION_STATUS,
   ACTIVATION_STATUS_VALUES,
   isValidActivationStatus,
+  ORDER_STATUS,
+  ORDER_STATUS_VALUES,
+  isValidOrderStatus,
+  ORDER_NEXT_STEPS,
   createDatabase,
   createDevice,
   createPlan,
