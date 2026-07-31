@@ -3,6 +3,14 @@
 const { DatabaseSync } = require('node:sqlite');
 
 const { REQUIREMENT, REQUIREMENT_VALUES, isValidRequirement } = require('./requirement.js');
+const {
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_VALUES,
+  isValidPaymentStatus,
+  ACTIVATION_STATUS,
+  ACTIVATION_STATUS_VALUES,
+  isValidActivationStatus,
+} = require('./status.js');
 const { runMigrations } = require('./migrations.js');
 const { seed } = require('./seed.js');
 const { recommend } = require('./recommend.js');
@@ -192,6 +200,12 @@ module.exports = {
   REQUIREMENT,
   REQUIREMENT_VALUES,
   isValidRequirement,
+  PAYMENT_STATUS,
+  PAYMENT_STATUS_VALUES,
+  isValidPaymentStatus,
+  ACTIVATION_STATUS,
+  ACTIVATION_STATUS_VALUES,
+  isValidActivationStatus,
   createDatabase,
   createDevice,
   createPlan,
